@@ -82,6 +82,7 @@
 | NET-01 | Phase 1 | Pending |
 | NET-02 | Phase 1 | Pending |
 | NET-03 | Phase 2 | Pending |
+| Phase 4-6 | Phase 4-6 | Pending |
 
 **Coverage:**
 - v1 requirements: 18 total
