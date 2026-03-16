@@ -1,31 +1,47 @@
 /**
- * Configuration store for machine settings
+ * Configuration store for machine settings and Notion config
  */
 
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import { MachineConfig, MachineConfigInput } from '../types/MachineConfig';
 import { Logger } from '../utils/Logger';
 
+export interface NotionConfigData {
+  token?: string;
+  databaseId?: string;
+  validated?: boolean;
+  lastValidated?: number;
+}
+
+const ENCRYPTION_KEY = 'comfyui-monitor-notion-token-key-32bytes!'; // 32 bytes for AES-256
+
 export class ConfigStore {
   private configPath: string;
+  private notionConfigPath: string;
   private machines: Map<string, MachineConfig> = new Map();
+  private notionConfig: NotionConfigData = {};
 
   constructor(configPath?: string) {
     // Use provided path for testing, or app data directory for production
     if (configPath) {
       this.configPath = configPath;
+      this.notionConfigPath = path.join(path.dirname(configPath), 'notion-config.json');
     } else {
       try {
         const { app } = require('electron');
         const userDataPath = app.getPath('userData');
         this.configPath = path.join(userDataPath, 'machines.json');
+        this.notionConfigPath = path.join(userDataPath, 'notion-config.json');
       } catch {
         // Fallback for test environment
         this.configPath = path.join(process.cwd(), 'test-config', 'machines.json');
+        this.notionConfigPath = path.join(process.cwd(), 'test-config', 'notion-config.json');
       }
     }
     Logger.info('ConfigStore initialized', { path: this.configPath });
+    this.loadNotionConfig();
   }
 
   /**
@@ -66,8 +82,62 @@ export class ConfigStore {
   }
 
   /**
-   * Add a new machine configuration
+   * Load Notion config from file
    */
+  private loadNotionConfig(): void {
+    try {
+      if (fs.existsSync(this.notionConfigPath)) {
+        const data = fs.readFileSync(this.notionConfigPath, 'utf-8');
+        this.notionConfig = JSON.parse(data);
+        Logger.info('Loaded Notion configuration');
+      } else {
+        Logger.info('No existing Notion configuration file found');
+        this.notionConfig = {};
+      }
+    } catch (error) {
+      Logger.error('Failed to load Notion configuration', error);
+      this.notionConfig = {};
+    }
+  }
+
+  /**
+   * Save Notion config to file
+   */
+  private saveNotionConfig(): void {
+    try {
+      const dir = path.dirname(this.notionConfigPath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      fs.writeFileSync(this.notionConfigPath, JSON.stringify(this.notionConfig, null, 2), 'utf-8');
+      Logger.debug('Notion configuration saved');
+    } catch (error) {
+      Logger.error('Failed to save Notion configuration', error);
+    }
+  }
+
+  /**
+   * Encrypt token for storage
+   */
+  private encryptToken(token: string): string {
+    const cipher = crypto.createCipher('aes-256-cbc', ENCRYPTION_KEY);
+    let encrypted = cipher.update(token, 'utf8', 'hex');
+    encrypted += cipher.final('hex');
+    return encrypted;
+  }
+
+  /**
+   * Decrypt token from storage
+   */
+  private decryptToken(encrypted: string): string {
+    const decipher = crypto.createDecipher('aes-256-cbc', ENCRYPTION_KEY);
+    let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+    decrypted += decipher.final('utf8');
+    return decrypted;
+  }
+
+  // Machine management methods
+
   addMachine(input: MachineConfigInput): MachineConfig {
     const id = this.generateId();
     const machine: MachineConfig = {
@@ -82,9 +152,6 @@ export class ConfigStore {
     return machine;
   }
 
-  /**
-   * Remove a machine configuration
-   */
   removeMachine(id: string): boolean {
     const existed = this.machines.delete(id);
     if (existed) {
@@ -94,9 +161,6 @@ export class ConfigStore {
     return existed;
   }
 
-  /**
-   * Update a machine configuration
-   */
   updateMachine(id: string, updates: Partial<MachineConfigInput>): MachineConfig | null {
     const machine = this.machines.get(id);
     if (!machine) {
@@ -111,9 +175,6 @@ export class ConfigStore {
     return updated;
   }
 
-  /**
-   * Update machine status
-   */
   updateStatus(id: string, status: Partial<Pick<MachineConfig, 'status' | 'connectionStatus' | 'lastUpdate' | 'errorMessage'>>): MachineConfig | null {
     const machine = this.machines.get(id);
     if (!machine) {
@@ -125,30 +186,62 @@ export class ConfigStore {
     return updated;
   }
 
-  /**
-   * Get all machines
-   */
   getMachines(): MachineConfig[] {
     return Array.from(this.machines.values());
   }
 
-  /**
-   * Get a specific machine
-   */
   getMachine(id: string): MachineConfig | undefined {
     return this.machines.get(id);
   }
 
-  /**
-   * Generate unique ID for machine
-   */
+  // Notion config methods
+
+  setNotionConfig(token: string, databaseId: string): void {
+    this.notionConfig = {
+      token: this.encryptToken(token),
+      databaseId,
+      validated: false,
+      lastValidated: undefined,
+    };
+    this.saveNotionConfig();
+    Logger.info('Notion configuration saved');
+  }
+
+  getNotionConfig(): NotionConfigData | null {
+    if (!this.notionConfig.token || !this.notionConfig.databaseId) {
+      return null;
+    }
+
+    try {
+      const token = this.decryptToken(this.notionConfig.token);
+      return {
+        ...this.notionConfig,
+        token,
+      };
+    } catch (error) {
+      Logger.error('Failed to decrypt Notion token', error);
+      return null;
+    }
+  }
+
+  markNotionValidated(validated: boolean): void {
+    this.notionConfig.validated = validated;
+    this.notionConfig.lastValidated = validated ? Date.now() : undefined;
+    this.saveNotionConfig();
+  }
+
+  clearNotionConfig(): void {
+    this.notionConfig = {};
+    this.saveNotionConfig();
+    Logger.info('Notion configuration cleared');
+  }
+
+  // Utility methods
+
   private generateId(): string {
     return `machine_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
   }
 
-  /**
-   * Get machine count
-   */
   getCount(): number {
     return this.machines.size;
   }

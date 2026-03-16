@@ -7,6 +7,7 @@ import { configStore } from '../services/ConfigStore';
 import { webSocketManager } from '../services/WebSocketManager';
 import { statusEngine } from '../services/StatusEngine';
 import { eventBus } from '../services/EventBus';
+import { notionClient } from '../services/NotionClient';
 import { Logger } from '../utils/Logger';
 import { MachineConfig } from '../types/MachineConfig';
 import type { MachineData, IPCPayload } from '../shared/ipc-types';
@@ -152,6 +153,77 @@ export function setupIPC(mainWindow: BrowserWindow) {
     } catch (error) {
       Logger.error('IPC: machines:disconnect-all failed', error);
       return { success: false, error: 'Failed to disconnect all' };
+    }
+  });
+
+  // Notion: Get config
+  ipcMain.handle('notion:get-config', () => {
+    try {
+      Logger.debug('IPC: notion:get-config');
+      const config = configStore.getNotionConfig();
+      return { 
+        success: true, 
+        data: { 
+          configured: !!config,
+          validated: config?.validated || false,
+          databaseId: config?.databaseId ? config.databaseId.substring(0, 8) + '...' : null,
+        }
+      };
+    } catch (error) {
+      Logger.error('IPC: notion:get-config failed', error);
+      return { success: false, error: 'Failed to get Notion config' };
+    }
+  });
+
+  // Notion: Set config
+  ipcMain.handle('notion:set-config', (event, payload: IPCPayload['notion:set-config']) => {
+    try {
+      Logger.info('IPC: notion:set-config');
+      configStore.setNotionConfig(payload.token, payload.databaseId);
+      
+      // Initialize Notion client with new config
+      const config = configStore.getNotionConfig();
+      if (config && config.token && config.databaseId) {
+        notionClient.init({
+          token: config.token,
+          databaseId: config.databaseId,
+        });
+      }
+      
+      return { success: true };
+    } catch (error) {
+      Logger.error('IPC: notion:set-config failed', error);
+      return { success: false, error: 'Failed to set Notion config' };
+    }
+  });
+
+  // Notion: Test connection
+  ipcMain.handle('notion:test-connection', async () => {
+    try {
+      Logger.info('IPC: notion:test-connection');
+      const result = await notionClient.testConnection();
+      
+      if (result.success) {
+        configStore.markNotionValidated(true);
+      }
+      
+      return { success: result.success, error: result.error };
+    } catch (error) {
+      Logger.error('IPC: notion:test-connection failed', error);
+      return { success: false, error: 'Connection test failed' };
+    }
+  });
+
+  // Notion: Clear config
+  ipcMain.handle('notion:clear-config', () => {
+    try {
+      Logger.info('IPC: notion:clear-config');
+      configStore.clearNotionConfig();
+      notionClient.reset();
+      return { success: true };
+    } catch (error) {
+      Logger.error('IPC: notion:clear-config failed', error);
+      return { success: false, error: 'Failed to clear Notion config' };
     }
   });
 

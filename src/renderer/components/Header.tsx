@@ -4,9 +4,10 @@ interface HeaderProps {
   onAddMachine: () => void;
   onConnectAll: () => void;
   onDisconnectAll: () => void;
+  onSettings: () => void;
 }
 
-const Header: React.FC<HeaderProps> = ({ onAddMachine, onConnectAll, onDisconnectAll }) => {
+const Header: React.FC<HeaderProps> = ({ onAddMachine, onConnectAll, onDisconnectAll, onSettings }) => {
   return (
     <header className="header">
       <div className="header-left">
@@ -15,6 +16,9 @@ const Header: React.FC<HeaderProps> = ({ onAddMachine, onConnectAll, onDisconnec
       </div>
       
       <div className="header-actions">
+        <button className="btn btn-secondary" onClick={onSettings}>
+          ⚙️ 設定
+        </button>
         <button className="btn btn-secondary" onClick={onConnectAll}>
           全部連接
         </button>

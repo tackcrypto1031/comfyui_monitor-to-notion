@@ -18,7 +18,11 @@ export type RendererToMainChannel =
   | 'machines:connect'
   | 'machines:disconnect'
   | 'machines:connect-all'
-  | 'machines:disconnect-all';
+  | 'machines:disconnect-all'
+  | 'notion:get-config'
+  | 'notion:set-config'
+  | 'notion:test-connection'
+  | 'notion:clear-config';
 
 // Machine data types
 export interface MachineData {
@@ -52,6 +56,10 @@ export interface IPCPayload {
   'machines:disconnect': { id: string };
   'machines:connect-all': void;
   'machines:disconnect-all': void;
+  'notion:get-config': void;
+  'notion:set-config': { token: string; databaseId: string };
+  'notion:test-connection': void;
+  'notion:clear-config': void;
 }
 
 // Request/Response types

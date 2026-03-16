@@ -3,12 +3,14 @@ import Header from './Header';
 import MachineList from './MachineList';
 import StatusBar from './StatusBar';
 import AddMachineModal from './AddMachineModal';
+import SettingsModal from './SettingsModal';
 import type { MachineData } from '../../shared/ipc-types';
 
 const App: React.FC = () => {
   const [machines, setMachines] = useState<MachineData[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
   // Load initial machines
   useEffect(() => {
@@ -115,6 +117,7 @@ const App: React.FC = () => {
         onAddMachine={() => setShowAddModal(true)}
         onConnectAll={handleConnectAll}
         onDisconnectAll={handleDisconnectAll}
+        onSettings={() => setShowSettings(true)}
       />
       
       <main className="main-content">
@@ -132,6 +135,12 @@ const App: React.FC = () => {
         <AddMachineModal
           onClose={() => setShowAddModal(false)}
           onAdd={handleAddMachine}
+        />
+      )}
+
+      {showSettings && (
+        <SettingsModal
+          onClose={() => setShowSettings(false)}
         />
       )}
     </div>

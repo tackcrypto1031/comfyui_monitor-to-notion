@@ -2,6 +2,8 @@ import { app, BrowserWindow } from 'electron';
 import path from 'path';
 import { setupIPC } from './ipc';
 import { configStore } from '../services/ConfigStore';
+import { notionClient } from '../services/NotionClient';
+import { notionLogger } from '../services/NotionLogger';
 import { Logger } from '../utils/Logger';
 
 let mainWindow: BrowserWindow | null = null;
@@ -38,6 +40,20 @@ function createWindow() {
 app.whenReady().then(() => {
   // Load existing configurations
   configStore.load();
+  
+  // Initialize Notion client if configured
+  const notionConfig = configStore.getNotionConfig();
+  if (notionConfig && notionConfig.token && notionConfig.databaseId) {
+    notionClient.init({
+      token: notionConfig.token,
+      databaseId: notionConfig.databaseId,
+    });
+    notionLogger.init();
+    Logger.info('Notion logger initialized');
+  } else {
+    Logger.info('Notion not configured, skipping initialization');
+  }
+  
   Logger.info('App ready');
   
   createWindow();
