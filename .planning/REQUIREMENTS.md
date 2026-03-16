@@ -64,9 +64,9 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| CORE-01 | Phase 1 | Pending |
-| CORE-02 | Phase 1 | Pending |
-| CORE-03 | Phase 1 | Pending |
+| CORE-01 | Phase 1 | ✓ Complete |
+| CORE-02 | Phase 1 | ✓ Complete |
+| CORE-03 | Phase 1 | ✓ Complete |
 | CORE-04 | Phase 2 | Pending |
 | CORE-05 | Phase 3 | Pending |
 | CORE-06 | Phase 2 | Pending |
@@ -79,8 +79,8 @@
 | NOTION-02 | Phase 3 | Pending |
 | NOTION-03 | Phase 3 | Pending |
 | NOTION-04 | Phase 3 | Pending |
-| NET-01 | Phase 1 | Pending |
-| NET-02 | Phase 1 | Pending |
+| NET-01 | Phase 1 | ✓ Complete |
+| NET-02 | Phase 1 | ✓ Complete |
 | NET-03 | Phase 2 | Pending |
 | Phase 4-6 | Phase 4-6 | Pending |
 
