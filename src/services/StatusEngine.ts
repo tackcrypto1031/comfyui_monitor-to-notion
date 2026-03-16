@@ -5,6 +5,7 @@
 import { Logger } from '../utils/Logger';
 import { eventBus } from './EventBus';
 import { MachineStatus } from '../types/MachineConfig';
+import { Throttler } from '../utils/Throttle';
 
 export interface ComfyUIMessage {
   type: string;
@@ -28,6 +29,8 @@ interface MachineState {
 
 export class StatusEngine {
   private machineStates: Map<string, MachineState> = new Map();
+  private statusThrottler: Map<string, Throttler> = new Map();
+  private readonly throttleInterval = 500; // 500ms throttle
 
   /**
    * Process incoming WebSocket message
@@ -90,15 +93,37 @@ export class StatusEngine {
       
       state.status = newStatus;
       
-      // Emit status change event
-      eventBus.emit('machine:status-change', {
-        machineId,
-        status: newStatus,
-        previousStatus
-      });
+      // Throttle status change events
+      this.emitStatusChangeThrottled(machineId, newStatus, previousStatus);
     }
 
     return newStatus;
+  }
+
+  /**
+   * Emit status change with throttling
+   */
+  private emitStatusChangeThrottled(
+    machineId: string,
+    status: MachineStatus,
+    previousStatus: MachineStatus
+  ): void {
+    if (!this.statusThrottler.has(machineId)) {
+      this.statusThrottler.set(machineId, new Throttler({
+        interval: this.throttleInterval,
+        leading: true,
+        trailing: true,
+      }));
+    }
+
+    const throttler = this.statusThrottler.get(machineId)!;
+    throttler.call(() => {
+      eventBus.emit('machine:status-change', {
+        machineId,
+        status,
+        previousStatus
+      });
+    });
   }
 
   /**

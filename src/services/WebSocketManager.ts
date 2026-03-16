@@ -6,32 +6,69 @@ import WebSocket from 'ws';
 import { Logger } from '../utils/Logger';
 import { eventBus } from './EventBus';
 import { ConnectionStatus } from '../types/MachineConfig';
+import { RetryStrategy, isRetryableError } from '../utils/RetryStrategy';
 
 export interface WebSocketMessage {
   type: string;
   data: any;
 }
 
+export interface WebSocketManagerConfig {
+  maxConnections: number;
+  maxReconnectAttempts: number;
+  reconnectBaseDelay: number;
+  reconnectMaxDelay: number;
+  pingInterval: number;
+}
+
+const DEFAULT_CONFIG: WebSocketManagerConfig = {
+  maxConnections: 20,
+  maxReconnectAttempts: 10,
+  reconnectBaseDelay: 1000,
+  reconnectMaxDelay: 30000,
+  pingInterval: 30000,
+};
+
 export class WebSocketManager {
   private connections: Map<string, WebSocketConnection> = new Map();
-  private readonly maxReconnectAttempts = 6;
-  private readonly reconnectDelays = [1000, 2000, 4000, 8000, 16000, 30000]; // Exponential backoff
+  private config: WebSocketManagerConfig;
+
+  constructor(config: Partial<WebSocketManagerConfig> = {}) {
+    this.config = { ...DEFAULT_CONFIG, ...config };
+    Logger.info('WebSocketManager initialized', { config: this.config });
+  }
 
   /**
    * Connect to a ComfyUI instance
    */
   connect(machineId: string, ip: string, port: number): void {
+    // Check connection limit
+    if (this.connections.size >= this.config.maxConnections && !this.connections.has(machineId)) {
+      Logger.warn('Connection limit reached', { 
+        current: this.connections.size, 
+        max: this.config.maxConnections 
+      });
+      return;
+    }
+
     // Disconnect existing connection first
     if (this.connections.has(machineId)) {
       this.disconnect(machineId);
     }
 
+    const retryStrategy = new RetryStrategy({
+      baseDelay: this.config.reconnectBaseDelay,
+      maxDelay: this.config.reconnectMaxDelay,
+      maxAttempts: this.config.maxReconnectAttempts,
+      jitter: 0.3,
+    });
+
     const connection = new WebSocketConnection(
       machineId,
       ip,
       port,
-      this.reconnectDelays,
-      this.maxReconnectAttempts,
+      retryStrategy,
+      this.config.pingInterval,
       (status) => this.onConnectionStatusChange(machineId, status),
       (message) => this.onMessage(machineId, message),
       (error) => this.onError(machineId, error)
@@ -122,7 +159,6 @@ export class WebSocketManager {
  */
 class WebSocketConnection {
   private ws: WebSocket | null = null;
-  private reconnectAttempts = 0;
   private reconnectTimeout: NodeJS.Timeout | null = null;
   private pingInterval: NodeJS.Timeout | null = null;
   public status: ConnectionStatus = 'disconnected';
@@ -131,8 +167,8 @@ class WebSocketConnection {
     private machineId: string,
     private ip: string,
     private port: number,
-    private reconnectDelays: number[],
-    private maxReconnectAttempts: number,
+    private retryStrategy: RetryStrategy,
+    private pingIntervalMs: number,
     private onStatusChange: (status: ConnectionStatus) => void,
     private onMessage: (message: WebSocketMessage) => void,
     private onError: (error: string) => void
@@ -166,8 +202,20 @@ class WebSocketConnection {
   private onOpen(): void {
     Logger.info('WebSocket connected', { machineId: this.machineId });
     this.setStatus('connected');
-    this.reconnectAttempts = 0;
+    this.retryStrategy.reset();
     this.startPing();
+  }
+
+  /**
+   * Start heartbeat ping
+   */
+  private startPing(): void {
+    this.pingInterval = setInterval(() => {
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.ws.ping();
+        Logger.debug('Ping sent', { machineId: this.machineId });
+      }
+    }, this.pingIntervalMs);
   }
 
   /**
@@ -203,36 +251,43 @@ class WebSocketConnection {
   }
 
   /**
-   * Schedule reconnection with exponential backoff
+   * Handle connection error
+   */
+  private handleError(error: string): void {
+    this.setStatus('error');
+    this.onError(error);
+    
+    // Check if error is retryable
+    if (!isRetryableError(error)) {
+      Logger.warn('Non-retryable error', { machineId: this.machineId, error });
+      return;
+    }
+    
+    this.scheduleReconnect();
+  }
+
+  /**
+   * Schedule reconnection with exponential backoff and jitter
    */
   private scheduleReconnect(): void {
-    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+    const delay = this.retryStrategy.getDelay();
+    
+    if (delay < 0) {
       Logger.warn('Max reconnect attempts reached', { machineId: this.machineId });
       this.setStatus('error');
       this.onError('Max reconnect attempts reached');
       return;
     }
-
-    const delay = this.reconnectDelays[Math.min(this.reconnectAttempts, this.reconnectDelays.length - 1)];
-    this.reconnectAttempts++;
     
-    Logger.info('Scheduling reconnect', { machineId: this.machineId, attempt: this.reconnectAttempts, delay });
+    Logger.info('Scheduling reconnect', { 
+      machineId: this.machineId, 
+      attempt: this.retryStrategy.getAttempts(),
+      delay 
+    });
     
     this.reconnectTimeout = setTimeout(() => {
       this.connect();
     }, delay);
-  }
-
-  /**
-   * Start heartbeat ping
-   */
-  private startPing(): void {
-    this.pingInterval = setInterval(() => {
-      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-        this.ws.ping();
-        Logger.debug('Ping sent', { machineId: this.machineId });
-      }
-    }, 30000); // 30 seconds
   }
 
   /**
@@ -243,15 +298,6 @@ class WebSocketConnection {
       clearInterval(this.pingInterval);
       this.pingInterval = null;
     }
-  }
-
-  /**
-   * Handle error
-   */
-  private handleError(error: string): void {
-    this.setStatus('error');
-    this.onError(error);
-    this.scheduleReconnect();
   }
 
   /**
@@ -281,9 +327,17 @@ class WebSocketConnection {
       this.ws = null;
     }
     
+    this.retryStrategy.reset();
+    
     Logger.info('Connection disposed', { machineId: this.machineId });
   }
 }
 
-// Export singleton instance
-export const webSocketManager = new WebSocketManager();
+// Export singleton instance with optimized config
+export const webSocketManager = new WebSocketManager({
+  maxConnections: 20,
+  maxReconnectAttempts: 10,
+  reconnectBaseDelay: 1000,
+  reconnectMaxDelay: 30000,
+  pingInterval: 30000,
+});
