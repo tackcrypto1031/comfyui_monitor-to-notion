@@ -1,0 +1,50 @@
+[
+  {
+    "name": "Machine 1",
+    "ip": "192.168.1.101",
+    "port": 8188,
+    "id": "machine_1773653601553_8tg9acls4",
+    "status": "idle",
+    "connectionStatus": "disconnected"
+  },
+  {
+    "name": "Machine 2",
+    "ip": "192.168.1.102",
+    "port": 8188,
+    "id": "machine_1773653601553_x8bye4pup",
+    "status": "idle",
+    "connectionStatus": "disconnected"
+  },
+  {
+    "name": "Machine 3",
+    "ip": "192.168.1.103",
+    "port": 8188,
+    "id": "machine_1773653601553_t0ppidxh2",
+    "status": "idle",
+    "connectionStatus": "disconnected"
+  },
+  {
+    "name": "Machine 4",
+    "ip": "192.168.1.104",
+    "port": 8188,
+    "id": "machine_1773653601553_z87y5vyfc",
+    "status": "idle",
+    "connectionStatus": "disconnected"
+  },
+  {
+    "name": "Machine 5",
+    "ip": "192.168.1.105",
+    "port": 8188,
+    "id": "machine_1773653601553_gl8yo00s2",
+    "status": "idle",
+    "connectionStatus": "disconnected"
+  },
+  {
+    "name": "Machine 6",
+    "ip": "192.168.1.106",
+    "port": 8188,
+    "id": "machine_1773653601554_7c9kmq6qz",
+    "status": "idle",
+    "connectionStatus": "disconnected"
+  }
+]
