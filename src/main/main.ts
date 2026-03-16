@@ -1,5 +1,8 @@
 import { app, BrowserWindow } from 'electron';
 import path from 'path';
+import { setupIPC } from './ipc';
+import { configStore } from '../services/ConfigStore';
+import { Logger } from '../utils/Logger';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -25,9 +28,18 @@ function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+
+  // Setup IPC handlers
+  if (mainWindow) {
+    setupIPC(mainWindow);
+  }
 }
 
 app.whenReady().then(() => {
+  // Load existing configurations
+  configStore.load();
+  Logger.info('App ready');
+  
   createWindow();
 
   app.on('activate', () => {
@@ -41,4 +53,9 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit();
   }
+});
+
+app.on('before-quit', () => {
+  Logger.info('App quitting');
+  // Cleanup will happen automatically via Node.js GC
 });
