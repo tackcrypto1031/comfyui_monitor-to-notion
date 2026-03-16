@@ -67,21 +67,21 @@
 | CORE-01 | Phase 1 | ✓ Complete |
 | CORE-02 | Phase 1 | ✓ Complete |
 | CORE-03 | Phase 1 | ✓ Complete |
-| CORE-04 | Phase 2 | Pending |
+| CORE-04 | Phase 2 | ✓ Complete |
 | CORE-05 | Phase 3 | Pending |
-| CORE-06 | Phase 2 | Pending |
-| GUI-01 | Phase 2 | Pending |
-| GUI-02 | Phase 2 | Pending |
-| GUI-03 | Phase 2 | Pending |
-| GUI-04 | Phase 2 | Pending |
-| GUI-05 | Phase 2 | Pending |
+| CORE-06 | Phase 2 | ✓ Complete |
+| GUI-01 | Phase 2 | ✓ Complete |
+| GUI-02 | Phase 2 | ✓ Complete |
+| GUI-03 | Phase 2 | ✓ Complete |
+| GUI-04 | Phase 2 | ✓ Complete |
+| GUI-05 | Phase 2 | ✓ Complete |
 | NOTION-01 | Phase 3 | Pending |
 | NOTION-02 | Phase 3 | Pending |
 | NOTION-03 | Phase 3 | Pending |
 | NOTION-04 | Phase 3 | Pending |
 | NET-01 | Phase 1 | ✓ Complete |
 | NET-02 | Phase 1 | ✓ Complete |
-| NET-03 | Phase 2 | Pending |
+| NET-03 | Phase 2 | ✓ Complete |
 | Phase 4-6 | Phase 4-6 | Pending |
 
 **Coverage:**
