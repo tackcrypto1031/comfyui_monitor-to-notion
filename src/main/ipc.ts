@@ -8,7 +8,9 @@ import { webSocketManager } from '../services/WebSocketManager';
 import { statusEngine } from '../services/StatusEngine';
 import { eventBus } from '../services/EventBus';
 import { notionClient } from '../services/NotionClient';
+import { notionLogger } from '../services/NotionLogger';
 import { ComfyUIClient } from '../services/ComfyUIClient';
+import { Logger } from '../utils/Logger';
 import { MachineConfig } from '../types/MachineConfig';
 import type { MachineData, IPCPayload } from '../shared/ipc-types';
 
@@ -287,6 +289,9 @@ export function setupIPC(mainWindow: BrowserWindow) {
           token: config.token,
           databaseId: config.databaseId,
         });
+        // Also initialize the logger so it starts listening for status events
+        notionLogger.init();
+        Logger.info('Notion logger initialized after config save');
       }
       
       return { success: true };

@@ -19,6 +19,12 @@ export class NotionLoggerClass {
    * Initialize Notion logger
    */
   init(): void {
+    // Guard against duplicate initialization
+    if (this.enabled) {
+      Logger.info('Notion logger already initialized, skipping');
+      return;
+    }
+    
     Logger.info('Initializing Notion logger');
 
     // Subscribe to aggregated status updates instead of directly to WebSocket status-change
