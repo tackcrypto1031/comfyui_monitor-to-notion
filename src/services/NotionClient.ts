@@ -26,6 +26,7 @@ export interface StatusChangeRecord {
 export class NotionClientClass {
   private client: Client | null = null;
   private databaseId: string | null = null;
+  private token: string | null = null;
   private initialized: boolean = false;
 
   /**
@@ -37,6 +38,7 @@ export class NotionClientClass {
     this.client = new Client({
       auth: config.token,
     });
+    this.token = config.token;
     this.databaseId = config.databaseId;
     this.initialized = true;
   }
@@ -65,66 +67,99 @@ export class NotionClientClass {
   }
 
   /**
-   * Create a status change record page
+   * Upsert a status change record (Create if missing, update if exists)
    */
-  async createStatusRecord(record: StatusChangeRecord): Promise<{ success: boolean; pageId?: string; error?: string }> {
+  async upsertStatusRecord(record: StatusChangeRecord): Promise<{ success: boolean; pageId?: string; error?: string }> {
     if (!this.client || !this.databaseId) {
       return { success: false, error: 'Notion client not initialized' };
     }
 
     try {
-      const response = await this.client.pages.create({
-        parent: { database_id: this.databaseId },
-        properties: {
-          '機器名稱': {
-            title: [
-              {
-                text: {
-                  content: record.machineName,
-                },
+      const properties = {
+        '機器名稱': {
+          title: [
+            {
+              text: {
+                content: record.machineName,
               },
-            ],
-          },
-          '狀態': {
-            select: {
-              name: record.status,
-              color: this.getStatusColor(record.status),
             },
-          },
-          'IP 位置': {
-            rich_text: [
-              {
-                text: {
-                  content: `${record.ip}:${record.port}`,
-                },
-              },
-            ],
-          },
-          '時間戳記': {
-            date: {
-              start: record.timestamp.toISOString(),
-            },
-          },
-          '連接狀態': {
-            select: {
-              name: record.connectionStatus,
-              color: this.getConnectionColor(record.connectionStatus),
-            },
-          },
-          '前狀態': {
-            select: {
-              name: record.previousStatus,
-              color: this.getStatusColor(record.previousStatus),
-            },
+          ],
+        },
+        '狀態': {
+          select: {
+            name: record.status,
+            color: this.getStatusColor(record.status),
           },
         },
-      });
+        'IP 位置': {
+          rich_text: [
+            {
+              text: {
+                content: `${record.ip}:${record.port}`,
+              },
+            },
+          ],
+        },
+        '時間戳記': {
+          date: {
+            start: record.timestamp.toISOString(),
+          },
+        },
+        '連接狀態': {
+          select: {
+            name: record.connectionStatus,
+            color: this.getConnectionColor(record.connectionStatus),
+          },
+        },
+        '前狀態': {
+          select: {
+            name: record.previousStatus,
+            color: this.getStatusColor(record.previousStatus),
+          },
+        },
+      };
 
-      Logger.debug('Notion page created', { pageId: response.id });
+      // Search for an existing record with the exact machineName
+      // Note: @notionhq/client v5 removed databases.query, so we use raw fetch
+      const queryResponse = await fetch(`https://api.notion.com/v1/databases/${this.databaseId}/query`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.token}`,
+          'Notion-Version': '2022-06-28',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          filter: {
+            property: '機器名稱',
+            title: {
+              equals: record.machineName,
+            },
+          },
+        }),
+      });
+      const existingQuery = await queryResponse.json() as { results: { id: string }[] };
+
+      let response;
+      if (existingQuery.results.length > 0) {
+        // Update the first matching row
+        response = await this.client.pages.update({
+          page_id: existingQuery.results[0].id,
+          properties: properties,
+        });
+        Logger.debug('Notion page updated (upsert)', { pageId: response.id });
+      } else {
+        // Did not exist, create a new row
+        response = await this.client.pages.create({
+          parent: { database_id: this.databaseId },
+          properties: properties,
+        });
+        Logger.debug('Notion page created (upsert)', { pageId: response.id });
+      }
+
       return { success: true, pageId: response.id };
     } catch (error) {
       const errorMessage = this.parseError(error);
-      Logger.error('Failed to create Notion record', { error: errorMessage });
+      Logger.error('Failed to upsert Notion record', { error: errorMessage });
       return { success: false, error: errorMessage };
     }
   }
@@ -200,6 +235,7 @@ export class NotionClientClass {
   reset(): void {
     this.client = null;
     this.databaseId = null;
+    this.token = null;
     this.initialized = false;
     Logger.info('Notion client reset');
   }

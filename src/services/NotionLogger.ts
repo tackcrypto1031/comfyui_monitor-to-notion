@@ -118,7 +118,7 @@ export class NotionLoggerClass {
       if (!record) continue;
 
       try {
-        const result = await notionClient.createStatusRecord(record);
+        const result = await notionClient.upsertStatusRecord(record);
         
         if (result.success) {
           Logger.debug('Status change logged to Notion', {
