@@ -27,6 +27,8 @@ export class NotionClientClass {
   private client: Client | null = null;
   private databaseId: string | null = null;
   private token: string | null = null;
+  private titlePropertyName: string = 'Name';
+  private titleDetected: boolean = false;
   private initialized: boolean = false;
 
   /**
@@ -52,10 +54,9 @@ export class NotionClientClass {
     }
 
     try {
-      // Try to retrieve the database to verify access
-      await this.client.databases.retrieve({
-        database_id: this.databaseId,
-      });
+      // Try to retrieve the database to verify access and detect title column name
+      await this.detectTitleProperty();
+      this.titleDetected = true;
 
       // Auto-create required columns if they don't exist
       await this.ensureSchema();
@@ -66,6 +67,34 @@ export class NotionClientClass {
       const errorMessage = this.parseError(error);
       Logger.error('Notion connection test failed', { error: errorMessage });
       return { success: false, error: errorMessage };
+    }
+  }
+
+  /**
+   * Detect the title property name from the database schema
+   */
+  private async detectTitleProperty(): Promise<void> {
+    if (!this.token || !this.databaseId) return;
+
+    const response = await fetch(`https://api.notion.com/v1/databases/${this.databaseId}`, {
+      headers: {
+        'Authorization': `Bearer ${this.token}`,
+        'Notion-Version': '2022-06-28',
+      },
+    });
+    const data = await response.json() as any;
+
+    if (!response.ok) {
+      throw new Error(data.message || 'Failed to retrieve database');
+    }
+
+    // Find the title property name
+    for (const [key, value] of Object.entries(data.properties || {})) {
+      if ((value as any).type === 'title') {
+        this.titlePropertyName = key;
+        Logger.info('Detected Notion title property', { name: key });
+        break;
+      }
     }
   }
 
@@ -131,9 +160,19 @@ export class NotionClientClass {
       return { success: false, error: 'Notion client not initialized' };
     }
 
+    // Detect title property if not yet detected (e.g. restored from saved config)
+    if (!this.titleDetected) {
+      try {
+        await this.detectTitleProperty();
+        this.titleDetected = true;
+      } catch (error) {
+        Logger.error('Failed to detect title property', { error });
+      }
+    }
+
     try {
-      const properties = {
-        'Name': {
+      const properties: any = {
+        [this.titlePropertyName]: {
           title: [
             {
               text: {
@@ -187,7 +226,7 @@ export class NotionClientClass {
         },
         body: JSON.stringify({
           filter: {
-            property: 'Name',
+            property: this.titlePropertyName,
             title: {
               equals: record.machineName,
             },
