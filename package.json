@@ -47,7 +47,7 @@
   },
   "build": {
     "appId": "com.comfyui.monitor",
-    "productName": "ComfyUI Monitor",
+    "productName": "塔克小工具 / 內網comfui運行監控",
     "directories": {
       "output": "release"
     },

@@ -11,7 +11,7 @@ const Header: React.FC<HeaderProps> = ({ onAddMachine, onConnectAll, onDisconnec
   return (
     <header className="header">
       <div className="header-left">
-        <h1 className="header-title">ComfyUI Monitor</h1>
+        <h1 className="header-title">塔克小工具 / 內網comfui運行監控</h1>
         <span className="header-subtitle">內網監控工具</span>
       </div>
       
