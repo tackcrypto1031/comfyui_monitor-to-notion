@@ -194,13 +194,24 @@ export class NotionClientClass {
           },
         }),
       });
-      const existingQuery = await queryResponse.json() as { results: { id: string }[] };
+      const existingQuery = await queryResponse.json() as any;
+
+      // Handle query errors (e.g. network issues, API errors)
+      if (!queryResponse.ok || !existingQuery.results) {
+        Logger.error('Notion query failed', {
+          status: queryResponse.status,
+          body: JSON.stringify(existingQuery),
+        });
+        // Fall through to create a new row
+      }
+
+      const results = existingQuery.results || [];
 
       let response;
-      if (existingQuery.results.length > 0) {
+      if (results.length > 0) {
         // Update the first matching row
         response = await this.client.pages.update({
-          page_id: existingQuery.results[0].id,
+          page_id: results[0].id,
           properties: properties,
         });
         Logger.debug('Notion page updated (upsert)', { pageId: response.id });
