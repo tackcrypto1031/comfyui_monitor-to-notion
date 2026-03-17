@@ -12,7 +12,11 @@ const electronAPI: ElectronAPI = {
       'machines:connect',
       'machines:disconnect',
       'machines:connect-all',
-      'machines:disconnect-all'
+      'machines:disconnect-all',
+      'notion:get-config',
+      'notion:set-config',
+      'notion:test-connection',
+      'notion:clear-config'
     ];
 
     if (!validChannels.includes(channel)) {
@@ -23,7 +27,7 @@ const electronAPI: ElectronAPI = {
       const result = await ipcRenderer.invoke(channel, payload);
       return result;
     } catch (error) {
-      console.error('IPC invoke error:', error);
+      console.error('IPC invoke error:', channel, error);
       return { success: false, error: 'IPC communication failed' };
     }
   },
@@ -54,5 +58,3 @@ const electronAPI: ElectronAPI = {
 };
 
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);
-
-console.log('Preload script loaded, electronAPI exposed');

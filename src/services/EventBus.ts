@@ -12,7 +12,10 @@ export type EventType =
   | 'machine:disconnected'
   | 'machine:error'
   | 'machine:config-updated'
-  | 'config:updated';
+  | 'config:updated'
+  | 'websocket:message'
+  | 'comfyui:status-change'
+  | 'machine:status-update';
 
 export interface EventPayload {
   'machine:status-change': { machineId: string; status: MachineConfig['status']; previousStatus: MachineConfig['status'] };
@@ -21,6 +24,9 @@ export interface EventPayload {
   'machine:error': { machineId: string; error: string };
   'machine:config-updated': { machineId: string };
   'config:updated': { machines: MachineConfig[] };
+  'websocket:message': { machineId: string; message: any };
+  'comfyui:status-change': { machineId: string; status: any };
+  'machine:status-update': { machines: any[] };
 }
 
 type Handler<T extends EventType> = (payload: EventPayload[T]) => void;

@@ -8,18 +8,80 @@ import { webSocketManager } from '../services/WebSocketManager';
 import { statusEngine } from '../services/StatusEngine';
 import { eventBus } from '../services/EventBus';
 import { notionClient } from '../services/NotionClient';
-import { Logger } from '../utils/Logger';
+import { ComfyUIClient } from '../services/ComfyUIClient';
 import { MachineConfig } from '../types/MachineConfig';
 import type { MachineData, IPCPayload } from '../shared/ipc-types';
 
+// Store HTTP polling clients
+const httpClients = new Map<string, ComfyUIClient>();
+
+// Subscribe to WebSocket messages and forward to StatusEngine
+eventBus.on('websocket:message', (data: { machineId: string; message: any }) => {
+  statusEngine.processMessage(data.machineId, data.message);
+});
+
+// Subscribe to status updates and forward to renderer
+eventBus.on('machine:status-update', (data: { machines: any[] }) => {
+  data.machines.forEach((m: any) => {
+    const machine = configStore.getMachine(m.id);
+    if (machine) {
+      configStore.updateStatus(m.id, {
+        status: m.status,
+        connectionStatus: m.connectionStatus,
+        lastUpdate: m.lastUpdate
+      });
+    }
+  });
+});
+
+let mainWindowRef: BrowserWindow | null = null;
+
+// Subscribe to status changes from StatusEngine and forward to renderer
+eventBus.on('machine:status-change', (data: { machineId: string; status: any; previousStatus: any }) => {
+  console.log('[IPC] machine:status-change', data.machineId, data.status);
+  const machine = configStore.getMachine(data.machineId);
+  if (machine && mainWindowRef && !mainWindowRef.isDestroyed()) {
+    configStore.updateStatus(data.machineId, {
+      status: data.status,
+      lastUpdate: Date.now()
+    });
+    const machines = configStore.getMachines().map(toMachineData);
+    console.log('[IPC] Sending to renderer:', machines.length, 'machines, first:', machines[0]?.status);
+    mainWindowRef.webContents.send('machines:status-update', { machines });
+  }
+});
+
+// Subscribe to HTTP polling status updates and directly send to renderer
+eventBus.on('comfyui:status-change', (data: { machineId: string; status: any }) => {
+  console.log('[IPC] comfyui:status-change', data.machineId, data.status);
+  const machine = configStore.getMachine(data.machineId);
+  if (machine && mainWindowRef && !mainWindowRef.isDestroyed()) {
+    let newStatus = 'idle';
+    if (data.status.isExecuting) {
+      newStatus = 'generating';
+    } else if (data.status.queueRemaining > 0) {
+      newStatus = 'running';
+    }
+
+    configStore.updateStatus(data.machineId, {
+      status: newStatus as any,
+      lastUpdate: Date.now()
+    });
+    const machines = configStore.getMachines().map(toMachineData);
+    console.log('[IPC] Directly sending to renderer:', machines.length, 'machines, first:', machines[0]?.status);
+    mainWindowRef.webContents.send('machines:status-update', { machines });
+  }
+});
+
 export function setupIPC(mainWindow: BrowserWindow) {
-  Logger.info('Setting up IPC handlers');
+  mainWindowRef = mainWindow;
+  
 
   // Helper to send data to renderer
   const sendToRenderer = <T extends keyof IPCPayload>(channel: T, data: IPCPayload[T]) => {
     if (!mainWindow.isDestroyed()) {
       mainWindow.webContents.send(channel, data);
-      Logger.debug('Sent to renderer', { channel, data });
+      
     }
   };
 
@@ -47,11 +109,20 @@ export function setupIPC(mainWindow: BrowserWindow) {
     sendToRenderer('machines:status-update', { machines });
   });
 
+  eventBus.on('machine:status-change', (payload) => {
+    console.log('[IPC] machine:status-change handler called', payload);
+    const machines = configStore.getMachines().map(toMachineData);
+    console.log('[IPC] Sending to renderer:', machines.length, 'machines');
+    console.log('[IPC] First machine status:', machines[0]?.status);
+    sendToRenderer('machines:status-update', { machines });
+    console.log('[IPC] sendToRenderer called');
+  });
+
   // IPC Handlers
 
   // Get all machines
   ipcMain.handle('machines:get', () => {
-    Logger.debug('IPC: machines:get');
+    
     const machines = configStore.getMachines().map(toMachineData);
     return { success: true, data: { machines } };
   });
@@ -59,15 +130,18 @@ export function setupIPC(mainWindow: BrowserWindow) {
   // Add machine
   ipcMain.handle('machines:add', (event, payload: IPCPayload['machines:add']) => {
     try {
-      Logger.info('IPC: machines:add', payload);
       const machine = configStore.addMachine(payload);
       
-      // Auto-connect to the new machine
+      // Start HTTP polling for status
+      const httpClient = new ComfyUIClient(machine.id, machine.ip, machine.port);
+      httpClient.startPolling();
+      httpClients.set(machine.id, httpClient);
+      
+      // Also connect WebSocket for connection status
       webSocketManager.connect(machine.id, machine.ip, machine.port);
       
       return { success: true, data: { machine: toMachineData(machine) } };
     } catch (error) {
-      Logger.error('IPC: machines:add failed', error);
       return { success: false, error: 'Failed to add machine' };
     }
   });
@@ -75,13 +149,32 @@ export function setupIPC(mainWindow: BrowserWindow) {
   // Remove machine
   ipcMain.handle('machines:remove', (event, payload: IPCPayload['machines:remove']) => {
     try {
-      Logger.info('IPC: machines:remove', payload);
+      // Stop HTTP polling
+      const httpClient = httpClients.get(payload.id);
+      if (httpClient) {
+        httpClient.stopPolling();
+        httpClients.delete(payload.id);
+      }
+      
+      // Disconnect WebSocket
       webSocketManager.disconnect(payload.id);
+      
+      // Reset status engine
       statusEngine.reset(payload.id);
+      
+      // Remove from config
       const removed = configStore.removeMachine(payload.id);
-      return { success: true, data: { removed } };
+      
+      if (removed) {
+        // Send updated list to renderer
+        const machines = configStore.getMachines().map(toMachineData);
+        sendToRenderer('machines:status-update', { machines });
+        return { success: true, data: { removed: true } };
+      } else {
+        return { success: false, error: 'Machine not found' };
+      }
     } catch (error) {
-      Logger.error('IPC: machines:remove failed', error);
+      
       return { success: false, error: 'Failed to remove machine' };
     }
   });
@@ -89,42 +182,52 @@ export function setupIPC(mainWindow: BrowserWindow) {
   // Update machine
   ipcMain.handle('machines:update', (event, payload: IPCPayload['machines:update']) => {
     try {
-      Logger.info('IPC: machines:update', payload);
+      
       const machine = configStore.updateMachine(payload.id, payload.updates);
       if (!machine) {
         return { success: false, error: 'Machine not found' };
       }
       return { success: true, data: { machine: toMachineData(machine) } };
     } catch (error) {
-      Logger.error('IPC: machines:update failed', error);
+      
       return { success: false, error: 'Failed to update machine' };
     }
   });
 
   // Connect to machine
   ipcMain.handle('machines:connect', (event, payload: IPCPayload['machines:connect']) => {
-    try {
-      Logger.info('IPC: machines:connect', payload);
-      const machine = configStore.getMachine(payload.id);
-      if (!machine) {
-        return { success: false, error: 'Machine not found' };
-      }
-      webSocketManager.connect(machine.id, machine.ip, machine.port);
-      return { success: true };
-    } catch (error) {
-      Logger.error('IPC: machines:connect failed', error);
-      return { success: false, error: 'Failed to connect' };
+    const machine = configStore.getMachine(payload.id);
+    if (!machine) {
+      return { success: false, error: 'Machine not found' };
     }
+    
+    // Connection is async - errors are handled by WebSocketManager
+    // Don't wait for connection result, just start the connection
+    webSocketManager.connect(machine.id, machine.ip, machine.port);
+    
+    let httpClient = httpClients.get(machine.id);
+    if (!httpClient) {
+      httpClient = new ComfyUIClient(machine.id, machine.ip, machine.port);
+      httpClients.set(machine.id, httpClient);
+    }
+    // Start polling to catch state, even for existing machines
+    httpClient.startPolling();
+    
+    return { success: true };
   });
 
   // Disconnect from machine
   ipcMain.handle('machines:disconnect', (event, payload: IPCPayload['machines:disconnect']) => {
     try {
-      Logger.info('IPC: machines:disconnect', payload);
       webSocketManager.disconnect(payload.id);
+      
+      const httpClient = httpClients.get(payload.id);
+      if (httpClient) {
+        httpClient.stopPolling();
+      }
+      
       return { success: true };
     } catch (error) {
-      Logger.error('IPC: machines:disconnect failed', error);
       return { success: false, error: 'Failed to disconnect' };
     }
   });
@@ -132,14 +235,21 @@ export function setupIPC(mainWindow: BrowserWindow) {
   // Connect to all machines
   ipcMain.handle('machines:connect-all', () => {
     try {
-      Logger.info('IPC: machines:connect-all');
+      
       const machines = configStore.getMachines();
       machines.forEach((machine: MachineConfig) => {
         webSocketManager.connect(machine.id, machine.ip, machine.port);
+        
+        let httpClient = httpClients.get(machine.id);
+        if (!httpClient) {
+          httpClient = new ComfyUIClient(machine.id, machine.ip, machine.port);
+          httpClients.set(machine.id, httpClient);
+        }
+        httpClient.startPolling();
       });
       return { success: true, data: { count: machines.length } };
     } catch (error) {
-      Logger.error('IPC: machines:connect-all failed', error);
+      
       return { success: false, error: 'Failed to connect all' };
     }
   });
@@ -147,11 +257,14 @@ export function setupIPC(mainWindow: BrowserWindow) {
   // Disconnect from all machines
   ipcMain.handle('machines:disconnect-all', () => {
     try {
-      Logger.info('IPC: machines:disconnect-all');
+      
       webSocketManager.disconnectAll();
+      
+      httpClients.forEach(client => client.stopPolling());
+
       return { success: true };
     } catch (error) {
-      Logger.error('IPC: machines:disconnect-all failed', error);
+      
       return { success: false, error: 'Failed to disconnect all' };
     }
   });
@@ -159,7 +272,7 @@ export function setupIPC(mainWindow: BrowserWindow) {
   // Notion: Get config
   ipcMain.handle('notion:get-config', () => {
     try {
-      Logger.debug('IPC: notion:get-config');
+      
       const config = configStore.getNotionConfig();
       return { 
         success: true, 
@@ -170,7 +283,7 @@ export function setupIPC(mainWindow: BrowserWindow) {
         }
       };
     } catch (error) {
-      Logger.error('IPC: notion:get-config failed', error);
+      
       return { success: false, error: 'Failed to get Notion config' };
     }
   });
@@ -178,7 +291,7 @@ export function setupIPC(mainWindow: BrowserWindow) {
   // Notion: Set config
   ipcMain.handle('notion:set-config', (event, payload: IPCPayload['notion:set-config']) => {
     try {
-      Logger.info('IPC: notion:set-config');
+      
       configStore.setNotionConfig(payload.token, payload.databaseId);
       
       // Initialize Notion client with new config
@@ -192,7 +305,7 @@ export function setupIPC(mainWindow: BrowserWindow) {
       
       return { success: true };
     } catch (error) {
-      Logger.error('IPC: notion:set-config failed', error);
+      
       return { success: false, error: 'Failed to set Notion config' };
     }
   });
@@ -200,7 +313,7 @@ export function setupIPC(mainWindow: BrowserWindow) {
   // Notion: Test connection
   ipcMain.handle('notion:test-connection', async () => {
     try {
-      Logger.info('IPC: notion:test-connection');
+      
       const result = await notionClient.testConnection();
       
       if (result.success) {
@@ -209,7 +322,7 @@ export function setupIPC(mainWindow: BrowserWindow) {
       
       return { success: result.success, error: result.error };
     } catch (error) {
-      Logger.error('IPC: notion:test-connection failed', error);
+      
       return { success: false, error: 'Connection test failed' };
     }
   });
@@ -217,17 +330,17 @@ export function setupIPC(mainWindow: BrowserWindow) {
   // Notion: Clear config
   ipcMain.handle('notion:clear-config', () => {
     try {
-      Logger.info('IPC: notion:clear-config');
+      
       configStore.clearNotionConfig();
       notionClient.reset();
       return { success: true };
     } catch (error) {
-      Logger.error('IPC: notion:clear-config failed', error);
+      
       return { success: false, error: 'Failed to clear Notion config' };
     }
   });
 
-  Logger.info('IPC handlers setup complete');
+  
 }
 
 /**
@@ -237,10 +350,31 @@ function toMachineData(config: MachineConfig): MachineData {
   // Update status from StatusEngine
   const engineStatus = statusEngine.getStatus(config.id);
   const wsStatus = webSocketManager.getStatus(config.id);
+  const httpClient = httpClients.get(config.id);
+  const httpStatusObj = httpClient?.getCurrentStatus();
   
+  let finalStatus = engineStatus;
+  
+  // Aggregate HTTP polling status to avoid it being overridden by idle WebSocket state
+  if (httpStatusObj) {
+    let httpStatus: typeof engineStatus = 'idle';
+    if (httpStatusObj.isExecuting) {
+      httpStatus = 'generating';
+    } else if (httpStatusObj.queueRemaining > 0) {
+      httpStatus = 'running';
+    }
+    
+    // Priority: generating > running > idle
+    if (httpStatus === 'generating' || engineStatus === 'generating') {
+      finalStatus = 'generating';
+    } else if (httpStatus === 'running' || engineStatus === 'running') {
+      finalStatus = 'running';
+    }
+  }
+
   return {
     ...config,
-    status: engineStatus,
+    status: finalStatus,
     connectionStatus: wsStatus,
     lastUpdate: config.lastUpdate,
     errorMessage: config.errorMessage,

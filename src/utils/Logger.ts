@@ -1,11 +1,11 @@
 /**
- * Simple logger utility
+ * Simple logger utility with EPIPE protection
  */
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 class LoggerClass {
-  private level: LogLevel = 'info';
+  private level: LogLevel = 'info'; // Default to info for debugging
 
   setLevel(level: LogLevel) {
     this.level = level;
@@ -16,33 +16,39 @@ class LoggerClass {
     return levels.indexOf(level) >= levels.indexOf(this.level);
   }
 
-  private formatMessage(level: LogLevel, message: string, ...args: any[]): string {
-    const timestamp = new Date().toISOString();
-    return `[${timestamp}] [${level.toUpperCase()}] ${message}`;
+  private safeLog(fn: Function, level: LogLevel, message: string, ...args: any[]) {
+    if (!this.shouldLog(level)) return;
+    
+    try {
+      const timestamp = new Date().toISOString();
+      fn(`[${timestamp}] [${level.toUpperCase()}] ${message}`, ...args);
+    } catch (error) {
+      // Ignore EPIPE errors silently
+      if ((error as any).code !== 'EPIPE') {
+        // Only log non-EPIPE errors to stderr
+        try {
+          process.stderr.write(`[Logger Error] ${(error as Error).message}\n`);
+        } catch {
+          // Ignore
+        }
+      }
+    }
   }
 
   debug(message: string, ...args: any[]) {
-    if (this.shouldLog('debug')) {
-      console.debug(this.formatMessage('debug', message), ...args);
-    }
+    this.safeLog(console.debug, 'debug', message, ...args);
   }
 
   info(message: string, ...args: any[]) {
-    if (this.shouldLog('info')) {
-      console.info(this.formatMessage('info', message), ...args);
-    }
+    this.safeLog(console.info, 'info', message, ...args);
   }
 
   warn(message: string, ...args: any[]) {
-    if (this.shouldLog('warn')) {
-      console.warn(this.formatMessage('warn', message), ...args);
-    }
+    this.safeLog(console.warn, 'warn', message, ...args);
   }
 
   error(message: string, ...args: any[]) {
-    if (this.shouldLog('error')) {
-      console.error(this.formatMessage('error', message), ...args);
-    }
+    this.safeLog(console.error, 'error', message, ...args);
   }
 }
 

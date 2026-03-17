@@ -33,29 +33,50 @@ const App: React.FC = () => {
 
   // Subscribe to status updates
   useEffect(() => {
-    if (!window.electronAPI) return;
+    if (!window.electronAPI) {
+      console.error('electronAPI not available for subscription');
+      return;
+    }
+    console.log('App: Subscribing to machines:status-update');
     const unsubscribe = window.electronAPI.on('machines:status-update', (data) => {
+      console.log('App: Received machines:status-update', data.machines?.length, 'machines');
+      if (data.machines && data.machines.length > 0) {
+        console.log('App: First machine status:', data.machines[0].status);
+      }
       setMachines(data.machines);
     });
 
     return () => {
+      console.log('App: Unsubscribing from machines:status-update');
       unsubscribe();
     };
   }, []);
 
   // Handle add machine
   const handleAddMachine = useCallback(async (machineInput: { name: string; ip: string; port: number }) => {
+    console.log('Adding machine:', machineInput);
+    
+    // Check if electronAPI is available
+    const api = (window as any).electronAPI;
+    if (!api) {
+      console.error('electronAPI not found on window');
+      alert('electronAPI not available - please check preload script');
+      return;
+    }
+    
     try {
-      if (!window.electronAPI) return;
-      const result = await window.electronAPI.invoke('machines:add', machineInput);
-      if (result.success) {
+      console.log('Invoking machines:add via electronAPI...');
+      const result = await api.invoke('machines:add', machineInput);
+      console.log('Result:', result);
+      
+      if (result && result.success) {
         setShowAddModal(false);
       } else {
-        alert('Failed to add machine: ' + result.error);
+        alert('Failed to add machine: ' + (result?.error || 'Unknown error'));
       }
     } catch (error) {
       console.error('Failed to add machine:', error);
-      alert('Failed to add machine');
+      alert('Failed to add machine: ' + (error as Error).message);
     }
   }, []);
 
@@ -66,28 +87,40 @@ const App: React.FC = () => {
     }
 
     try {
-      if (!window.electronAPI) return;
-      const result = await window.electronAPI.invoke('machines:remove', { id });
-      if (!result.success) {
-        alert('Failed to remove machine: ' + result.error);
+      const api = (window as any).electronAPI;
+      if (!api) {
+        alert('electronAPI not available');
+        return;
+      }
+      
+      const result = await api.invoke('machines:remove', { id });
+      if (!result || !result.success) {
+        alert('刪除失敗：' + (result?.error || '未知錯誤'));
       }
     } catch (error) {
       console.error('Failed to remove machine:', error);
-      alert('Failed to remove machine');
+      alert('刪除失敗：' + (error as Error).message);
     }
   }, []);
 
   // Handle connect/disconnect
   const handleToggleConnection = useCallback(async (machine: MachineData) => {
+    const api = (window as any).electronAPI;
+    if (!api) {
+      console.error('electronAPI not available');
+      return;
+    }
+    
     try {
-      if (!window.electronAPI) return;
       if (machine.connectionStatus === 'connected' || machine.connectionStatus === 'connecting') {
-        await window.electronAPI.invoke('machines:disconnect', { id: machine.id });
+        await api.invoke('machines:disconnect', { id: machine.id });
       } else {
-        await window.electronAPI.invoke('machines:connect', { id: machine.id });
+        // Connect is async, status will update via event
+        await api.invoke('machines:connect', { id: machine.id });
       }
     } catch (error) {
       console.error('Failed to toggle connection:', error);
+      // Don't show error popup - status will update in UI
     }
   }, []);
 

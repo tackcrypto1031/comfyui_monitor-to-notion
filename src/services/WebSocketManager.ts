@@ -1,12 +1,12 @@
 /**
- * WebSocket Manager for ComfyUI connections
+ * WebSocket Manager for ComfyUI connections with HTTP polling fallback
  */
 
 import WebSocket from 'ws';
-import { Logger } from '../utils/Logger';
 import { eventBus } from './EventBus';
 import { ConnectionStatus } from '../types/MachineConfig';
 import { RetryStrategy, isRetryableError } from '../utils/RetryStrategy';
+import { Logger } from '../utils/Logger';
 
 export interface WebSocketMessage {
   type: string;
@@ -35,23 +35,11 @@ export class WebSocketManager {
 
   constructor(config: Partial<WebSocketManagerConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
-    Logger.info('WebSocketManager initialized', { config: this.config });
   }
 
-  /**
-   * Connect to a ComfyUI instance
-   */
   connect(machineId: string, ip: string, port: number): void {
-    // Check connection limit
-    if (this.connections.size >= this.config.maxConnections && !this.connections.has(machineId)) {
-      Logger.warn('Connection limit reached', { 
-        current: this.connections.size, 
-        max: this.config.maxConnections 
-      });
-      return;
-    }
-
-    // Disconnect existing connection first
+    // HTTP polling is started by ComfyUIClient directly
+    // WebSocket is used for connection status only
     if (this.connections.has(machineId)) {
       this.disconnect(machineId);
     }
@@ -75,40 +63,26 @@ export class WebSocketManager {
     );
 
     this.connections.set(machineId, connection);
-    Logger.info('Connecting to ComfyUI', { machineId, ip, port });
     connection.connect();
   }
 
-  /**
-   * Disconnect from a ComfyUI instance
-   */
   disconnect(machineId: string): void {
     const connection = this.connections.get(machineId);
     if (connection) {
       connection.dispose();
       this.connections.delete(machineId);
-      Logger.info('Disconnected from ComfyUI', { machineId });
     }
   }
 
-  /**
-   * Disconnect all instances
-   */
   disconnectAll(): void {
     this.connections.forEach((_, machineId) => this.disconnect(machineId));
   }
 
-  /**
-   * Get connection status
-   */
   getStatus(machineId: string): ConnectionStatus {
     const connection = this.connections.get(machineId);
     return connection?.status || 'disconnected';
   }
 
-  /**
-   * Get all connection statuses
-   */
   getAllStatuses(): Map<string, ConnectionStatus> {
     const statuses = new Map<string, ConnectionStatus>();
     this.connections.forEach((conn, id) => {
@@ -117,12 +91,11 @@ export class WebSocketManager {
     return statuses;
   }
 
-  /**
-   * Handle connection status change
-   */
-  private onConnectionStatusChange(machineId: string, status: ConnectionStatus): void {
-    Logger.info('Connection status changed', { machineId, status });
+  getConnectionCount(): number {
+    return this.connections.size;
+  }
 
+  private onConnectionStatusChange(machineId: string, status: ConnectionStatus): void {
     if (status === 'connected') {
       eventBus.emit('machine:connected', { machineId });
     } else if (status === 'disconnected' || status === 'error') {
@@ -130,38 +103,26 @@ export class WebSocketManager {
     }
   }
 
-  /**
-   * Handle incoming message
-   */
   private onMessage(machineId: string, message: WebSocketMessage): void {
-    // Messages will be processed by StatusEngine
-    Logger.debug('WebSocket message received', { machineId, type: message.type });
+    eventBus.emit('websocket:message', { machineId, message });
+    const connection = this.connections.get(machineId);
+    if (connection) {
+      connection.processMessage(message);
+    }
   }
 
-  /**
-   * Handle error
-   */
   private onError(machineId: string, error: string): void {
-    Logger.error('WebSocket error', { machineId, error });
     eventBus.emit('machine:error', { machineId, error });
-  }
-
-  /**
-   * Get active connection count
-   */
-  getConnectionCount(): number {
-    return this.connections.size;
   }
 }
 
-/**
- * Individual WebSocket connection handler
- */
 class WebSocketConnection {
   private ws: WebSocket | null = null;
   private reconnectTimeout: NodeJS.Timeout | null = null;
   private pingInterval: NodeJS.Timeout | null = null;
   public status: ConnectionStatus = 'disconnected';
+  private isConnecting = false;
+  private isDisposing = false;
 
   constructor(
     private machineId: string,
@@ -170,129 +131,107 @@ class WebSocketConnection {
     private retryStrategy: RetryStrategy,
     private pingIntervalMs: number,
     private onStatusChange: (status: ConnectionStatus) => void,
-    private onMessage: (message: WebSocketMessage) => void,
+    public onMessage: (message: WebSocketMessage) => void,
     private onError: (error: string) => void
   ) {}
 
-  /**
-   * Establish WebSocket connection
-   */
   connect(): void {
+    if (this.isConnecting || this.isDisposing) {
+      return;
+    }
+
+    this.isConnecting = true;
+    
     try {
       this.setStatus('connecting');
       
       const clientId = `${this.machineId}_${Date.now()}`;
       const url = `ws://${this.ip}:${this.port}/ws?clientId=${clientId}`;
       
-      Logger.debug('Creating WebSocket connection', { url });
       this.ws = new WebSocket(url);
 
-      this.ws.on('open', () => this.onOpen());
-      this.ws.on('message', (data) => this.onMessageEvent(data));
-      this.ws.on('error', (error) => this.onErrorEvent(error));
-      this.ws.on('close', () => this.onClose());
+      this.ws.on('open', () => {
+        this.isConnecting = false;
+        this.onOpen();
+      });
+      
+      this.ws.on('message', (data) => {
+        this.onMessageEvent(data);
+      });
+      
+      this.ws.on('error', (error) => {
+        this.isConnecting = false;
+        this.onErrorEvent(error);
+      });
+      
+      this.ws.on('close', () => {
+        this.isConnecting = false;
+        this.onClose();
+      });
     } catch (error) {
+      this.isConnecting = false;
       this.handleError(`Connection failed: ${error}`);
     }
   }
 
-  /**
-   * Handle connection opened
-   */
   private onOpen(): void {
-    Logger.info('WebSocket connected', { machineId: this.machineId });
     this.setStatus('connected');
     this.retryStrategy.reset();
     this.startPing();
   }
 
-  /**
-   * Start heartbeat ping
-   */
-  private startPing(): void {
-    this.pingInterval = setInterval(() => {
-      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-        this.ws.ping();
-        Logger.debug('Ping sent', { machineId: this.machineId });
-      }
-    }, this.pingIntervalMs);
-  }
-
-  /**
-   * Handle incoming message
-   */
   private onMessageEvent(data: any): void {
     try {
       const message = JSON.parse(data.toString());
-      this.onMessage(message);
+      // Only log non-crystools messages
+      if (message.type !== 'crystools.monitor') {
+        Logger.debug(`[WS Message] ${this.machineId} Type: ${message.type}`);
+      }
+      this.processMessage(message);
     } catch (error) {
-      Logger.warn('Failed to parse message', { machineId: this.machineId, error });
+      // Ignore parse errors
     }
   }
 
-  /**
-   * Handle WebSocket error
-   */
-  private onErrorEvent(error: Error): void {
-    Logger.warn('WebSocket error event', { machineId: this.machineId, error: error.message });
+  processMessage(message: WebSocketMessage): void {
+    this.onMessage(message);
   }
 
-  /**
-   * Handle connection closed
-   */
+  private onErrorEvent(error: Error): void {
+    // Ignore
+  }
+
   private onClose(): void {
-    Logger.info('WebSocket closed', { machineId: this.machineId });
     this.stopPing();
     
-    if (this.status !== 'disconnected') {
+    if (this.status === 'connected' || this.status === 'connecting') {
       this.setStatus('disconnected');
       this.scheduleReconnect();
     }
   }
 
-  /**
-   * Handle connection error
-   */
-  private handleError(error: string): void {
-    this.setStatus('error');
-    this.onError(error);
-    
-    // Check if error is retryable
-    if (!isRetryableError(error)) {
-      Logger.warn('Non-retryable error', { machineId: this.machineId, error });
-      return;
-    }
-    
-    this.scheduleReconnect();
-  }
-
-  /**
-   * Schedule reconnection with exponential backoff and jitter
-   */
   private scheduleReconnect(): void {
     const delay = this.retryStrategy.getDelay();
     
     if (delay < 0) {
-      Logger.warn('Max reconnect attempts reached', { machineId: this.machineId });
       this.setStatus('error');
       this.onError('Max reconnect attempts reached');
       return;
     }
-    
-    Logger.info('Scheduling reconnect', { 
-      machineId: this.machineId, 
-      attempt: this.retryStrategy.getAttempts(),
-      delay 
-    });
     
     this.reconnectTimeout = setTimeout(() => {
       this.connect();
     }, delay);
   }
 
-  /**
-   * Stop heartbeat ping
-   */
+  private startPing(): void {
+    this.pingInterval = setInterval(() => {
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.ws.ping();
+      }
+    }, this.pingIntervalMs);
+  }
+
   private stopPing(): void {
     if (this.pingInterval) {
       clearInterval(this.pingInterval);
@@ -300,18 +239,26 @@ class WebSocketConnection {
     }
   }
 
-  /**
-   * Update connection status
-   */
+  private handleError(error: string): void {
+    this.setStatus('error');
+    this.onError(error);
+    
+    if (isRetryableError(error)) {
+      this.scheduleReconnect();
+    }
+  }
+
   private setStatus(status: ConnectionStatus): void {
     this.status = status;
     this.onStatusChange(status);
   }
 
-  /**
-   * Clean up resources
-   */
   dispose(): void {
+    if (this.isDisposing) {
+      return;
+    }
+    this.isDisposing = true;
+    
     this.setStatus('disconnected');
     
     if (this.reconnectTimeout) {
@@ -322,18 +269,23 @@ class WebSocketConnection {
     this.stopPing();
     
     if (this.ws) {
-      this.ws.removeAllListeners();
-      this.ws.close();
-      this.ws = null;
+      try {
+        this.ws.removeAllListeners();
+        if (this.ws.readyState === WebSocket.OPEN) {
+          this.ws.close(1000, 'Connection disposed');
+        }
+      } catch (error) {
+        // Ignore
+      } finally {
+        this.ws = null;
+      }
     }
     
     this.retryStrategy.reset();
-    
-    Logger.info('Connection disposed', { machineId: this.machineId });
+    this.isDisposing = false;
   }
 }
 
-// Export singleton instance with optimized config
 export const webSocketManager = new WebSocketManager({
   maxConnections: 20,
   maxReconnectAttempts: 10,

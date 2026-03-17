@@ -39,8 +39,10 @@
   },
   "dependencies": {
     "@notionhq/client": "^5.13.0",
+    "bufferutil": "^4.1.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
+    "utf-8-validate": "^6.0.6",
     "ws": "^8.16.0"
   },
   "build": {

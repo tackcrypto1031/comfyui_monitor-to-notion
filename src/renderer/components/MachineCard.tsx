@@ -9,6 +9,11 @@ interface MachineCardProps {
 
 const MachineCard: React.FC<MachineCardProps> = ({ machine, onRemove, onToggleConnection }) => {
   const getStatusText = (status: MachineData['status']) => {
+    // Only show status if connected
+    if (machine.connectionStatus === 'disconnected' || machine.connectionStatus === 'error') {
+      return '未連接';
+    }
+    
     switch (status) {
       case 'idle': return '閒置中';
       case 'running': return '運行中';
