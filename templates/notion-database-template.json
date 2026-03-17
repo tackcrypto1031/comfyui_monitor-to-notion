@@ -1,0 +1,154 @@
+{
+  "title": "ComfyUI 監控記錄",
+  "description": "自動記錄 ComfyUI Monitor 監控的狀態變化",
+  "properties": {
+    "機器名稱": {
+      "type": "title",
+      "description": "機器名稱 (主欄位)"
+    },
+    "狀態": {
+      "type": "select",
+      "description": "當前狀態",
+      "select": {
+        "options": [
+          {
+            "name": "idle",
+            "color": "green",
+            "description": "閒置中，無任務執行"
+          },
+          {
+            "name": "running",
+            "color": "yellow",
+            "description": "運行中，有任務在隊列"
+          },
+          {
+            "name": "generating",
+            "color": "blue",
+            "description": "算圖中，正在執行生成"
+          }
+        ]
+      }
+    },
+    "IP 位置": {
+      "type": "rich_text",
+      "description": "機器 IP 地址和埠號"
+    },
+    "時間戳記": {
+      "type": "date",
+      "description": "狀態變化時間"
+    },
+    "連接狀態": {
+      "type": "select",
+      "description": "WebSocket 連接狀態",
+      "select": {
+        "options": [
+          {
+            "name": "connected",
+            "color": "green",
+            "description": "已連接"
+          },
+          {
+            "name": "disconnected",
+            "color": "gray",
+            "description": "未連接"
+          },
+          {
+            "name": "error",
+            "color": "red",
+            "description": "連接錯誤"
+          }
+        ]
+      }
+    },
+    "前狀態": {
+      "type": "select",
+      "description": "變化前的狀態",
+      "select": {
+        "options": [
+          {
+            "name": "idle",
+            "color": "green"
+          },
+          {
+            "name": "running",
+            "color": "yellow"
+          },
+          {
+            "name": "generating",
+            "color": "blue"
+          }
+        ]
+      }
+    }
+  },
+  "views": [
+    {
+      "name": "所有記錄",
+      "type": "table",
+      "filters": [],
+      "sorts": [
+        {
+          "property": "時間戳記",
+          "direction": "desc"
+        }
+      ]
+    },
+    {
+      "name": "今日記錄",
+      "type": "table",
+      "filters": [
+        {
+          "property": "時間戳記",
+          "condition": "is_today"
+        }
+      ],
+      "sorts": [
+        {
+          "property": "時間戳記",
+          "direction": "desc"
+        }
+      ]
+    },
+    {
+      "name": "算圖中",
+      "type": "table",
+      "filters": [
+        {
+          "property": "狀態",
+          "condition": "equals",
+          "value": "generating"
+        }
+      ],
+      "sorts": [
+        {
+          "property": "時間戳記",
+          "direction": "desc"
+        }
+      ]
+    },
+    {
+      "name": "錯誤狀態",
+      "type": "table",
+      "filters": [
+        {
+          "property": "連接狀態",
+          "condition": "equals",
+          "value": "error"
+        }
+      ],
+      "sorts": [
+        {
+          "property": "時間戳記",
+          "direction": "desc"
+        }
+      ]
+    }
+  ],
+  "setup_instructions": {
+    "step1": "在 Notion 中建立新頁面",
+    "step2": "選擇 Database → Table view",
+    "step3": "按照上述 properties 建立欄位",
+    "step4": "建立 Integration 並連接資料庫",
+    "step5": "在 ComfyUI Monitor 中配置 Token 和資料庫 ID"
+  }
+}
