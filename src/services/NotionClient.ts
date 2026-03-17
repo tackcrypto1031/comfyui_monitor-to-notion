@@ -57,12 +57,69 @@ export class NotionClientClass {
         database_id: this.databaseId,
       });
 
+      // Auto-create required columns if they don't exist
+      await this.ensureSchema();
+
       Logger.info('Notion connection test successful');
       return { success: true };
     } catch (error) {
       const errorMessage = this.parseError(error);
       Logger.error('Notion connection test failed', { error: errorMessage });
       return { success: false, error: errorMessage };
+    }
+  }
+
+  /**
+   * Ensure the database has all required columns
+   */
+  private async ensureSchema(): Promise<void> {
+    if (!this.token || !this.databaseId) return;
+
+    try {
+      await fetch(`https://api.notion.com/v1/databases/${this.databaseId}`, {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${this.token}`,
+          'Notion-Version': '2022-06-28',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          properties: {
+            '狀態': {
+              select: {
+                options: [
+                  { name: 'idle', color: 'green' },
+                  { name: 'running', color: 'yellow' },
+                  { name: 'generating', color: 'blue' },
+                ],
+              },
+            },
+            'IP 位置': { rich_text: {} },
+            '時間戳記': { date: {} },
+            '連接狀態': {
+              select: {
+                options: [
+                  { name: 'connected', color: 'green' },
+                  { name: 'disconnected', color: 'gray' },
+                  { name: 'error', color: 'red' },
+                ],
+              },
+            },
+            '前狀態': {
+              select: {
+                options: [
+                  { name: 'idle', color: 'green' },
+                  { name: 'running', color: 'yellow' },
+                  { name: 'generating', color: 'blue' },
+                ],
+              },
+            },
+          },
+        }),
+      });
+      Logger.info('Notion database schema ensured');
+    } catch (error) {
+      Logger.error('Failed to ensure Notion schema', { error });
     }
   }
 
@@ -76,7 +133,7 @@ export class NotionClientClass {
 
     try {
       const properties = {
-        '機器名稱': {
+        'Name': {
           title: [
             {
               text: {
@@ -130,7 +187,7 @@ export class NotionClientClass {
         },
         body: JSON.stringify({
           filter: {
-            property: '機器名稱',
+            property: 'Name',
             title: {
               equals: record.machineName,
             },
