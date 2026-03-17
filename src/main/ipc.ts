@@ -36,26 +36,32 @@ eventBus.on('machine:status-update', (data: { machines: any[] }) => {
 
 let mainWindowRef: BrowserWindow | null = null;
 
+export function broadcastMachinesUpdate() {
+  if (mainWindowRef && !mainWindowRef.isDestroyed()) {
+    const machines = configStore.getMachines().map(toMachineData);
+    mainWindowRef.webContents.send('machines:status-update', { machines });
+    machines.forEach((m: any) => {
+      eventBus.emit('notion:check-status', { machineId: m.id, status: m.status });
+    });
+  }
+}
+
 // Subscribe to status changes from StatusEngine and forward to renderer
 eventBus.on('machine:status-change', (data: { machineId: string; status: any; previousStatus: any }) => {
-  console.log('[IPC] machine:status-change', data.machineId, data.status);
   const machine = configStore.getMachine(data.machineId);
-  if (machine && mainWindowRef && !mainWindowRef.isDestroyed()) {
+  if (machine) {
     configStore.updateStatus(data.machineId, {
       status: data.status,
       lastUpdate: Date.now()
     });
-    const machines = configStore.getMachines().map(toMachineData);
-    console.log('[IPC] Sending to renderer:', machines.length, 'machines, first:', machines[0]?.status);
-    mainWindowRef.webContents.send('machines:status-update', { machines });
+    broadcastMachinesUpdate();
   }
 });
 
 // Subscribe to HTTP polling status updates and directly send to renderer
 eventBus.on('comfyui:status-change', (data: { machineId: string; status: any }) => {
-  console.log('[IPC] comfyui:status-change', data.machineId, data.status);
   const machine = configStore.getMachine(data.machineId);
-  if (machine && mainWindowRef && !mainWindowRef.isDestroyed()) {
+  if (machine) {
     let newStatus = 'idle';
     if (data.status.isExecuting) {
       newStatus = 'generating';
@@ -67,9 +73,7 @@ eventBus.on('comfyui:status-change', (data: { machineId: string; status: any }) 
       status: newStatus as any,
       lastUpdate: Date.now()
     });
-    const machines = configStore.getMachines().map(toMachineData);
-    console.log('[IPC] Directly sending to renderer:', machines.length, 'machines, first:', machines[0]?.status);
-    mainWindowRef.webContents.send('machines:status-update', { machines });
+    broadcastMachinesUpdate();
   }
 });
 
@@ -85,37 +89,19 @@ export function setupIPC(mainWindow: BrowserWindow) {
     }
   };
 
-  // Subscribe to EventBus events and forward to renderer
-  eventBus.on('machine:status-change', (_payload) => {
-    const machines = configStore.getMachines().map(toMachineData);
-    sendToRenderer('machines:status-update', { machines });
-  });
-
   eventBus.on('machine:connected', (payload) => {
     sendToRenderer('machines:connected', payload);
-    const machines = configStore.getMachines().map(toMachineData);
-    sendToRenderer('machines:status-update', { machines });
+    broadcastMachinesUpdate();
   });
 
   eventBus.on('machine:disconnected', (payload) => {
     sendToRenderer('machines:disconnected', payload);
-    const machines = configStore.getMachines().map(toMachineData);
-    sendToRenderer('machines:status-update', { machines });
+    broadcastMachinesUpdate();
   });
 
   eventBus.on('machine:error', (payload) => {
     sendToRenderer('machines:error', payload);
-    const machines = configStore.getMachines().map(toMachineData);
-    sendToRenderer('machines:status-update', { machines });
-  });
-
-  eventBus.on('machine:status-change', (payload) => {
-    console.log('[IPC] machine:status-change handler called', payload);
-    const machines = configStore.getMachines().map(toMachineData);
-    console.log('[IPC] Sending to renderer:', machines.length, 'machines');
-    console.log('[IPC] First machine status:', machines[0]?.status);
-    sendToRenderer('machines:status-update', { machines });
-    console.log('[IPC] sendToRenderer called');
+    broadcastMachinesUpdate();
   });
 
   // IPC Handlers

@@ -13,15 +13,25 @@ export class NotionLoggerClass {
   private processing: boolean = false;
   private processInterval: NodeJS.Timeout | null = null;
 
+  private lastStatusMap: Map<string, string> = new Map();
+
   /**
    * Initialize Notion logger
    */
   init(): void {
     Logger.info('Initializing Notion logger');
 
-    // Subscribe to status change events
-    eventBus.on('machine:status-change', (payload) => {
-      this.handleStatusChange(payload);
+    // Subscribe to aggregated status updates instead of directly to WebSocket status-change
+    eventBus.on('notion:check-status', (payload: { machineId: string, status: 'idle' | 'running' | 'generating' }) => {
+      const prev = this.lastStatusMap.get(payload.machineId) || 'idle';
+      if (prev !== payload.status) {
+        this.lastStatusMap.set(payload.machineId, payload.status);
+        this.handleStatusChange({
+          machineId: payload.machineId,
+          status: payload.status,
+          previousStatus: prev as 'idle' | 'running' | 'generating'
+        });
+      }
     });
 
     // Start queue processor

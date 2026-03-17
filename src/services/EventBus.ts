@@ -15,7 +15,8 @@ export type EventType =
   | 'config:updated'
   | 'websocket:message'
   | 'comfyui:status-change'
-  | 'machine:status-update';
+  | 'machine:status-update'
+  | 'notion:check-status';
 
 export interface EventPayload {
   'machine:status-change': { machineId: string; status: MachineConfig['status']; previousStatus: MachineConfig['status'] };
@@ -27,6 +28,7 @@ export interface EventPayload {
   'websocket:message': { machineId: string; message: any };
   'comfyui:status-change': { machineId: string; status: any };
   'machine:status-update': { machines: any[] };
+  'notion:check-status': { machineId: string; status: 'idle' | 'running' | 'generating' };
 }
 
 type Handler<T extends EventType> = (payload: EventPayload[T]) => void;
