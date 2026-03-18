@@ -5,7 +5,7 @@
 import { Client, APIResponseError } from '@notionhq/client';
 import { Logger } from '../utils/Logger';
 
-export type NotionStatus = 'idle' | 'running' | 'generating';
+export type NotionStatus = 'idle' | 'running' | 'generating' | 'disconnected';
 export type NotionConnectionStatus = 'connected' | 'disconnected' | 'error';
 
 export interface NotionConfig {
@@ -117,9 +117,10 @@ export class NotionClientClass {
             '狀態': {
               select: {
                 options: [
-                  { name: 'idle', color: 'green' },
-                  { name: 'running', color: 'yellow' },
-                  { name: 'generating', color: 'blue' },
+                  { name: '閒置', color: 'green' },
+                  { name: '運行中', color: 'yellow' },
+                  { name: '算圖中', color: 'blue' },
+                  { name: '未連接', color: 'gray' },
                 ],
               },
             },
@@ -128,18 +129,19 @@ export class NotionClientClass {
             '連接狀態': {
               select: {
                 options: [
-                  { name: 'connected', color: 'green' },
-                  { name: 'disconnected', color: 'gray' },
-                  { name: 'error', color: 'red' },
+                  { name: '已連接', color: 'green' },
+                  { name: '未連接', color: 'gray' },
+                  { name: '錯誤', color: 'red' },
                 ],
               },
             },
             '前狀態': {
               select: {
                 options: [
-                  { name: 'idle', color: 'green' },
-                  { name: 'running', color: 'yellow' },
-                  { name: 'generating', color: 'blue' },
+                  { name: '閒置', color: 'green' },
+                  { name: '運行中', color: 'yellow' },
+                  { name: '算圖中', color: 'blue' },
+                  { name: '未連接', color: 'gray' },
                 ],
               },
             },
@@ -171,6 +173,10 @@ export class NotionClientClass {
     }
 
     try {
+      const statusLabel = this.getStatusLabel(record.status);
+      const prevStatusLabel = this.getStatusLabel(record.previousStatus);
+      const connectionLabel = this.getConnectionLabel(record.connectionStatus);
+
       const properties: any = {
         [this.titlePropertyName]: {
           title: [
@@ -183,7 +189,7 @@ export class NotionClientClass {
         },
         '狀態': {
           select: {
-            name: record.status,
+            name: statusLabel,
             color: this.getStatusColor(record.status),
           },
         },
@@ -203,13 +209,13 @@ export class NotionClientClass {
         },
         '連接狀態': {
           select: {
-            name: record.connectionStatus,
+            name: connectionLabel,
             color: this.getConnectionColor(record.connectionStatus),
           },
         },
         '前狀態': {
           select: {
-            name: record.previousStatus,
+            name: prevStatusLabel,
             color: this.getStatusColor(record.previousStatus),
           },
         },
@@ -282,8 +288,44 @@ export class NotionClientClass {
         return 'yellow';
       case 'generating':
         return 'blue';
+      case 'disconnected':
+        return 'gray';
       default:
         return 'gray';
+    }
+  }
+
+  /**
+   * Get status label in Traditional Chinese
+   */
+  private getStatusLabel(status: NotionStatus): string {
+    switch (status) {
+      case 'idle':
+        return '閒置';
+      case 'running':
+        return '運行中';
+      case 'generating':
+        return '算圖中';
+      case 'disconnected':
+        return '未連接';
+      default:
+        return status;
+    }
+  }
+
+  /**
+   * Get connection status label in Traditional Chinese
+   */
+  private getConnectionLabel(status: NotionConnectionStatus): string {
+    switch (status) {
+      case 'connected':
+        return '已連接';
+      case 'disconnected':
+        return '未連接';
+      case 'error':
+        return '錯誤';
+      default:
+        return status;
     }
   }
 

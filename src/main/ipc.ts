@@ -43,7 +43,7 @@ export function broadcastMachinesUpdate() {
     const machines = configStore.getMachines().map(toMachineData);
     mainWindowRef.webContents.send('machines:status-update', { machines });
     machines.forEach((m: any) => {
-      eventBus.emit('notion:check-status', { machineId: m.id, status: m.status });
+      eventBus.emit('notion:check-status', { machineId: m.id, status: m.status, connectionStatus: m.connectionStatus });
     });
   }
 }

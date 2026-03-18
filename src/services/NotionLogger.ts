@@ -3,7 +3,7 @@
  */
 
 import { eventBus } from './EventBus';
-import { notionClient, StatusChangeRecord } from './NotionClient';
+import { notionClient, StatusChangeRecord, NotionStatus } from './NotionClient';
 import { configStore } from './ConfigStore';
 import { Logger } from '../utils/Logger';
 
@@ -14,6 +14,7 @@ export class NotionLoggerClass {
   private processInterval: NodeJS.Timeout | null = null;
 
   private lastStatusMap: Map<string, string> = new Map();
+  private lastConnectionMap: Map<string, string> = new Map();
 
   /**
    * Initialize Notion logger
@@ -27,15 +28,27 @@ export class NotionLoggerClass {
     
     Logger.info('Initializing Notion logger');
 
-    // Subscribe to aggregated status updates instead of directly to WebSocket status-change
-    eventBus.on('notion:check-status', (payload: { machineId: string, status: 'idle' | 'running' | 'generating' }) => {
-      const prev = this.lastStatusMap.get(payload.machineId) || 'idle';
-      if (prev !== payload.status) {
+    // Subscribe to aggregated status updates with both status and connectionStatus
+    eventBus.on('notion:check-status', (payload: { machineId: string, status: 'idle' | 'running' | 'generating', connectionStatus: 'disconnected' | 'connecting' | 'connected' | 'error' }) => {
+      const prevStatus = this.lastStatusMap.get(payload.machineId) || 'idle';
+      const prevConnection = this.lastConnectionMap.get(payload.machineId) || 'disconnected';
+
+      // Determine effective status: if disconnected/error, override to 'disconnected'
+      const isDisconnected = payload.connectionStatus === 'disconnected' || payload.connectionStatus === 'error' || payload.connectionStatus === 'connecting';
+      const effectiveStatus: NotionStatus = isDisconnected ? 'disconnected' : payload.status;
+      const effectivePrev: NotionStatus = (prevConnection === 'disconnected' || prevConnection === 'error' || prevConnection === 'connecting') ? 'disconnected' : (prevStatus as NotionStatus);
+
+      const statusChanged = effectiveStatus !== effectivePrev;
+      const connectionChanged = payload.connectionStatus !== prevConnection;
+
+      if (statusChanged || connectionChanged) {
         this.lastStatusMap.set(payload.machineId, payload.status);
+        this.lastConnectionMap.set(payload.machineId, payload.connectionStatus);
         this.handleStatusChange({
           machineId: payload.machineId,
-          status: payload.status,
-          previousStatus: prev as 'idle' | 'running' | 'generating'
+          status: effectiveStatus,
+          previousStatus: effectivePrev,
+          connectionStatus: payload.connectionStatus,
         });
       }
     });
@@ -51,8 +64,9 @@ export class NotionLoggerClass {
    */
   private handleStatusChange(payload: {
     machineId: string;
-    status: 'idle' | 'running' | 'generating';
-    previousStatus: 'idle' | 'running' | 'generating';
+    status: NotionStatus;
+    previousStatus: NotionStatus;
+    connectionStatus: 'disconnected' | 'connecting' | 'connected' | 'error';
   }): void {
     if (!this.enabled) {
       Logger.debug('Notion logger disabled, skipping status change');
@@ -71,6 +85,10 @@ export class NotionLoggerClass {
       return;
     }
 
+    // Map connectionStatus for Notion record
+    const notionConnectionStatus: 'connected' | 'disconnected' | 'error' =
+      payload.connectionStatus === 'connecting' ? 'disconnected' : payload.connectionStatus;
+
     // Create record
     const record: StatusChangeRecord = {
       machineName: machine.name,
@@ -79,13 +97,14 @@ export class NotionLoggerClass {
       ip: machine.ip,
       port: machine.port,
       timestamp: new Date(),
-      connectionStatus: machine.connectionStatus === 'connecting' ? 'disconnected' : machine.connectionStatus,
+      connectionStatus: notionConnectionStatus,
     };
 
     Logger.info('Queuing status change for Notion', {
       machine: record.machineName,
       from: payload.previousStatus,
       to: payload.status,
+      connectionStatus: payload.connectionStatus,
     });
 
     // Add to queue

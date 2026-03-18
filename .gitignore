@@ -1,15 +1,34 @@
+# Dependencies
 node_modules/
+
+# Build output
 dist/
 release/
+
+# Logs
 *.log
+
+# OS files
 .DS_Store
 Thumbs.db
+
+# Editor files
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
+
+# Environment / secrets
 .env
 .env.local
+
+# Test coverage
 coverage/
 *.tgz
+
+# Private config with real IPs / Notion tokens
+test-config/
+
+# Internal development planning (not for public)
+.planning/
