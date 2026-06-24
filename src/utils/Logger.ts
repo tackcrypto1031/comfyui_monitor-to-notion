@@ -5,7 +5,12 @@
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
 
 class LoggerClass {
-  private level: LogLevel = 'info'; // Default to info for debugging
+  private level: LogLevel = this.getInitialLevel();
+
+  private getInitialLevel(): LogLevel {
+    const level = process.env.COMFYUI_MONITOR_LOG_LEVEL as LogLevel | undefined;
+    return level && ['debug', 'info', 'warn', 'error'].includes(level) ? level : 'error';
+  }
 
   setLevel(level: LogLevel) {
     this.level = level;

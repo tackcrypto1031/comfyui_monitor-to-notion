@@ -3,6 +3,7 @@
  */
 
 import { eventBus } from './EventBus';
+import { Logger } from '../utils/Logger';
 
 export interface ComfyUIStatus {
   queueRemaining: number;
@@ -16,7 +17,10 @@ export class ComfyUIClient {
   private machineId: string;
   private pollInterval: NodeJS.Timeout | null = null;
   private lastStatus: ComfyUIStatus | null = null;
+  private lastErrorMessage: string | null = null;
+  private lastErrorLoggedAt = 0;
   private readonly pollIntervalMs = 1000;
+  private readonly errorLogIntervalMs = 30000;
 
   constructor(machineId: string, ip: string, port: number) {
     this.machineId = machineId;
@@ -29,7 +33,6 @@ export class ComfyUIClient {
       return;
     }
 
-    console.log('[HTTP Client] Starting polling', this.machineId, this.ip, this.port);
     this.pollStatus();
     this.pollInterval = setInterval(() => {
       this.pollStatus();
@@ -37,7 +40,6 @@ export class ComfyUIClient {
   }
 
   stopPolling(): void {
-    console.log('[HTTP Client] Stopping polling', this.machineId);
     if (this.pollInterval) {
       clearInterval(this.pollInterval);
       this.pollInterval = null;
@@ -52,12 +54,6 @@ export class ComfyUIClient {
       const queueRunning = queueResponse?.queue_running || [];
       const isExecuting = queueRunning.length > 0;
 
-      console.log('[HTTP Client] Poll result', this.machineId, {
-        queueRemaining,
-        queueRunning: queueRunning.length,
-        isExecuting
-      });
-
       const newStatus: ComfyUIStatus = {
         queueRemaining,
         executingNode: isExecuting ? 'executing' : null,
@@ -71,8 +67,28 @@ export class ComfyUIClient {
         status: newStatus
       });
     } catch (error) {
-      console.error('[HTTP Polling Error]', this.machineId, error);
+      this.logPollingError(error);
     }
+  }
+
+  private logPollingError(error: unknown): void {
+    const message = error instanceof Error ? error.message : String(error);
+    const now = Date.now();
+    const shouldLog =
+      message !== this.lastErrorMessage ||
+      now - this.lastErrorLoggedAt >= this.errorLogIntervalMs;
+
+    if (!shouldLog) {
+      return;
+    }
+
+    this.lastErrorMessage = message;
+    this.lastErrorLoggedAt = now;
+    Logger.error('HTTP polling failed', {
+      machineId: this.machineId,
+      target: `${this.ip}:${this.port}`,
+      error: message,
+    });
   }
 
   private async fetchQueue(): Promise<any> {

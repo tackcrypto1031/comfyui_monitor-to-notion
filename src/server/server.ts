@@ -134,7 +134,6 @@ export async function startWebServer(): Promise<void> {
       host,
       port: webServer.port,
     });
-    console.log(`ComfyUI Monitor: http://127.0.0.1:${webServer.port}/`);
   });
 
   process.on('SIGINT', async () => {

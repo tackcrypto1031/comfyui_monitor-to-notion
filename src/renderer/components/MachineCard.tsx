@@ -8,6 +8,17 @@ interface MachineCardProps {
   onToggleConnection: (machine: MachineData) => void;
 }
 
+export const formatLastUpdate = (timestamp?: number, now = Date.now()) => {
+  if (!timestamp || !Number.isFinite(timestamp)) return '從未更新';
+
+  const elapsedMs = Math.max(0, now - timestamp);
+  const seconds = Math.floor(elapsedMs / 1000);
+  if (seconds < 60) return `${seconds}秒前`;
+
+  const minutes = Math.floor(seconds / 60);
+  return `${minutes}分鐘前`;
+};
+
 const MachineCard: React.FC<MachineCardProps> = ({ machine, canManage, onRemove, onToggleConnection }) => {
   const getStatusText = (status: MachineData['status']) => {
     // Only show status if connected
@@ -31,14 +42,6 @@ const MachineCard: React.FC<MachineCardProps> = ({ machine, canManage, onRemove,
       case 'error': return '錯誤';
       default: return status;
     }
-  };
-
-  const formatLastUpdate = (timestamp?: number) => {
-    if (!timestamp) return '從未更新';
-    const seconds = Math.floor((Date.now() - timestamp) / 1000);
-    if (seconds < 60) return `${seconds}秒前`;
-    const minutes = Math.floor(seconds / 60);
-    return `${minutes}分鐘前`;
   };
 
   return (
