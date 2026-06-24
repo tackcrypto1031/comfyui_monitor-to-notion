@@ -209,6 +209,18 @@ body {
   background: var(--bg-tertiary);
 }
 
+.btn-icon.btn-danger {
+  background: #991b1b;
+  border-color: #7f1d1d;
+  color: #ffffff;
+}
+
+.btn-icon.btn-danger:hover {
+  background: #7f1d1d;
+  border-color: #7f1d1d;
+  color: #ffffff;
+}
+
 /* Main Content */
 .main-content {
   flex: 1;
