@@ -1,62 +1,62 @@
 @echo off
 chcp 65001 >nul
 title ComfyUI Monitor
+cd /d "%~dp0"
 
 echo ========================================
-echo   ComfyUI Monitor - 快速啟動
+echo   ComfyUI Monitor - Web Launcher
 echo ========================================
 echo.
 
-REM 檢查 Node.js 是否安裝
+set "PORT=7890"
+
 node --version >nul 2>&1
 if %errorlevel% neq 0 (
-    echo [錯誤] 未檢測到 Node.js，請先安裝 Node.js 20.x
-    echo 下載連結：https://nodejs.org/
-    pause
+    echo [ERROR] Node.js was not found. Install Node.js 20.x first.
+    echo To run without Node.js installed, build the portable package first.
+    if not "%COMFYUI_MONITOR_NO_PAUSE%"=="1" pause
     exit /b 1
 )
 
-echo [✓] Node.js 已安裝
+call npm --version >nul 2>&1
+if %errorlevel% neq 0 (
+    echo [ERROR] npm was not found. Check that Node.js is installed correctly.
+    if not "%COMFYUI_MONITOR_NO_PAUSE%"=="1" pause
+    exit /b 1
+)
+
+echo [OK] Node.js and npm detected.
 echo.
 
-REM 檢查依賴是否已安裝
 if not exist "node_modules" (
-    echo [提示] 首次啟動，正在安裝依賴...
-    call npm install
+    echo [INFO] node_modules not found. Installing dependencies...
+    call npm ci
     if %errorlevel% neq 0 (
-        echo [錯誤] 依賴安裝失敗
-        pause
+        echo [ERROR] Dependency install failed.
+        if not "%COMFYUI_MONITOR_NO_PAUSE%"=="1" pause
         exit /b 1
     )
-    echo [✓] 依賴安裝完成
+    echo [OK] Dependencies installed.
     echo.
 )
 
-REM 檢查是否需要編譯
-if not exist "dist" (
-    echo [提示] 正在編譯專案...
-    call npm run build
-    if %errorlevel% neq 0 (
-        echo [錯誤] 編譯失敗
-        pause
-        exit /b 1
-    )
-    echo [✓] 編譯完成
-    echo.
+echo [INFO] Building web app...
+call npm run build:web
+if %errorlevel% neq 0 (
+    echo [ERROR] Build failed.
+    if not "%COMFYUI_MONITOR_NO_PAUSE%"=="1" pause
+    exit /b 1
 )
 
-echo [啟動] 正在啟動 ComfyUI Monitor...
 echo.
-echo 提示：
-echo - 按 Ctrl+C 可停止應用
-echo - 應用將在背景運行
+echo [START] Starting ComfyUI Monitor Web Server...
+echo Local URL: http://127.0.0.1:%PORT%/
+echo Enable listen mode in the UI to show LAN share URLs.
 echo.
 
-REM 啟動應用
-start "" npm run electron:dev
+if not "%COMFYUI_MONITOR_NO_BROWSER%"=="1" (
+    start "" "http://127.0.0.1:%PORT%/"
+)
+call npm run start:web
 
-echo [✓] 應用已啟動
-echo.
-echo 視窗應該已經開啟，如果沒有看到請檢查工作列
-echo.
-pause
+if not "%COMFYUI_MONITOR_NO_PAUSE%"=="1" pause

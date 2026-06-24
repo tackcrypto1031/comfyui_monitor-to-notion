@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import NotionConfigForm from './NotionConfigForm';
+import { api } from '../api';
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -22,11 +23,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ onClose }) => {
 
   const loadNotionConfig = async () => {
     try {
-      if (!window.electronAPI) return;
-      const result = await window.electronAPI.invoke('notion:get-config', undefined);
-      if (result.success) {
-        setNotionConfig(result.data);
-      }
+      const result = await api.getNotionConfig();
+      setNotionConfig(result);
     } catch (error) {
       console.error('Failed to load Notion config:', error);
     } finally {

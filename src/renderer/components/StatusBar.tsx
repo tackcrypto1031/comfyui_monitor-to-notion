@@ -1,5 +1,5 @@
 import React from 'react';
-import type { MachineData } from '../../shared/ipc-types';
+import type { MachineData } from '../../shared/api-types';
 
 interface StatusBarProps {
   machines: MachineData[];

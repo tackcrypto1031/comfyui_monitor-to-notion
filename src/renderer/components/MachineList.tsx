@@ -1,10 +1,11 @@
 import React from 'react';
-import type { MachineData } from '../../shared/ipc-types';
+import type { MachineData } from '../../shared/api-types';
 import MachineCard from './MachineCard';
 
 interface MachineListProps {
   machines: MachineData[];
   loading: boolean;
+  canManage: boolean;
   onRemove: (id: string) => void;
   onToggleConnection: (machine: MachineData) => void;
 }
@@ -12,6 +13,7 @@ interface MachineListProps {
 const MachineList: React.FC<MachineListProps> = ({
   machines,
   loading,
+  canManage,
   onRemove,
   onToggleConnection,
 }) => {
@@ -29,7 +31,7 @@ const MachineList: React.FC<MachineListProps> = ({
       <div className="empty-state">
         <div className="empty-state-icon">🖥️</div>
         <h3>尚未添加機器</h3>
-        <p>點擊右上角的「添加機器」按鈕開始監控 ComfyUI</p>
+        <p>{canManage ? '點擊右上角的「添加機器」按鈕開始監控 ComfyUI' : '目前尚未配置任何 ComfyUI 機器'}</p>
       </div>
     );
   }
@@ -40,6 +42,7 @@ const MachineList: React.FC<MachineListProps> = ({
         <MachineCard
           key={machine.id}
           machine={machine}
+          canManage={canManage}
           onRemove={onRemove}
           onToggleConnection={onToggleConnection}
         />

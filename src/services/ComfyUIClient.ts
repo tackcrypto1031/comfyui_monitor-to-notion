@@ -25,6 +25,10 @@ export class ComfyUIClient {
   }
 
   startPolling(): void {
+    if (this.pollInterval) {
+      return;
+    }
+
     console.log('[HTTP Client] Starting polling', this.machineId, this.ip, this.port);
     this.pollStatus();
     this.pollInterval = setInterval(() => {

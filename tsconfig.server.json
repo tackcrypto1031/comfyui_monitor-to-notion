@@ -1,0 +1,19 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "CommonJS",
+    "lib": ["ES2022"],
+    "outDir": "./dist/server",
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": true
+  },
+  "include": [
+    "src/server/**/*",
+    "src/services/**/*",
+    "src/shared/api-types.ts",
+    "src/types/**/*",
+    "src/utils/**/*"
+  ],
+  "exclude": ["node_modules", "dist", "release", "src/renderer", "src/main"]
+}

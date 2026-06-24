@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { api } from '../api';
 
 interface NotionConfigFormProps {
   initialConfig: {
@@ -21,11 +22,10 @@ const NotionConfigForm: React.FC<NotionConfigFormProps> = ({ initialConfig, onSa
     setTestResult(null);
 
     try {
-      if (!window.electronAPI) return;
-      const result = await window.electronAPI.invoke('notion:test-connection', undefined);
-      setTestResult(result);
+      await api.testNotionConnection();
+      setTestResult({ success: true });
     } catch (error) {
-      setTestResult({ success: false, error: 'Connection test failed' });
+      setTestResult({ success: false, error: (error as Error).message || 'Connection test failed' });
     } finally {
       setTesting(false);
     }
@@ -38,21 +38,11 @@ const NotionConfigForm: React.FC<NotionConfigFormProps> = ({ initialConfig, onSa
     }
 
     try {
-      if (!window.electronAPI) return;
-      const result = await window.electronAPI.invoke('notion:set-config', {
-        token: token.trim(),
-        databaseId: databaseId.trim(),
-      });
-
-      if (result.success) {
-        // Test connection after saving
-        await handleTestConnection();
-        onSave();
-      } else {
-        alert('儲存失敗：' + result.error);
-      }
+      await api.setNotionConfig(token.trim(), databaseId.trim());
+      await handleTestConnection();
+      onSave();
     } catch (error) {
-      alert('儲存失敗');
+      alert('儲存失敗：' + (error as Error).message);
     }
   };
 
@@ -62,8 +52,7 @@ const NotionConfigForm: React.FC<NotionConfigFormProps> = ({ initialConfig, onSa
     }
 
     try {
-      if (!window.electronAPI) return;
-      await window.electronAPI.invoke('notion:clear-config', undefined);
+      await api.clearNotionConfig();
       setToken('');
       setDatabaseId('');
       setTestResult(null);

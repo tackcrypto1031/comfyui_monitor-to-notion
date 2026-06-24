@@ -139,9 +139,18 @@ export class StatusEngineClass {
     return state?.status || 'idle';
   }
 
+  getAllStatuses(): Map<string, MachineStatus> {
+    const statuses = new Map<string, MachineStatus>();
+    this.machineStates.forEach((state, machineId) => {
+      statuses.set(machineId, state.status);
+    });
+    return statuses;
+  }
+
   reset(machineId: string): void {
     this.machineStates.delete(machineId);
   }
 }
 
+export const StatusEngine = StatusEngineClass;
 export const statusEngine = new StatusEngineClass();

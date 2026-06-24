@@ -5,6 +5,7 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+import os from 'os';
 import { MachineConfig, MachineConfigInput } from '../types/MachineConfig';
 import { Logger } from '../utils/Logger';
 
@@ -29,19 +30,24 @@ export class ConfigStore {
       this.configPath = configPath;
       this.notionConfigPath = path.join(path.dirname(configPath), 'notion-config.json');
     } else {
-      try {
-        const { app } = require('electron');
-        const userDataPath = app.getPath('userData');
-        this.configPath = path.join(userDataPath, 'machines.json');
-        this.notionConfigPath = path.join(userDataPath, 'notion-config.json');
-      } catch {
-        // Fallback for test environment
-        this.configPath = path.join(process.cwd(), 'test-config', 'machines.json');
-        this.notionConfigPath = path.join(process.cwd(), 'test-config', 'notion-config.json');
-      }
+      const userDataPath = this.getDefaultUserDataPath();
+      this.configPath = path.join(userDataPath, 'machines.json');
+      this.notionConfigPath = path.join(userDataPath, 'notion-config.json');
     }
     Logger.info('ConfigStore initialized', { path: this.configPath });
     this.loadNotionConfig();
+  }
+
+  private getDefaultUserDataPath(): string {
+    if (process.env.COMFYUI_MONITOR_CONFIG_DIR) {
+      return process.env.COMFYUI_MONITOR_CONFIG_DIR;
+    }
+
+    if (process.platform === 'win32' && process.env.APPDATA) {
+      return path.join(process.env.APPDATA, 'comfyui-monitor');
+    }
+
+    return path.join(os.homedir(), '.comfyui-monitor');
   }
 
   /**

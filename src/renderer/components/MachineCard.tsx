@@ -1,13 +1,14 @@
 import React from 'react';
-import type { MachineData } from '../../shared/ipc-types';
+import type { MachineData } from '../../shared/api-types';
 
 interface MachineCardProps {
   machine: MachineData;
+  canManage: boolean;
   onRemove: (id: string) => void;
   onToggleConnection: (machine: MachineData) => void;
 }
 
-const MachineCard: React.FC<MachineCardProps> = ({ machine, onRemove, onToggleConnection }) => {
+const MachineCard: React.FC<MachineCardProps> = ({ machine, canManage, onRemove, onToggleConnection }) => {
   const getStatusText = (status: MachineData['status']) => {
     // Only show status if connected
     if (machine.connectionStatus === 'disconnected' || machine.connectionStatus === 'error') {
@@ -44,22 +45,24 @@ const MachineCard: React.FC<MachineCardProps> = ({ machine, onRemove, onToggleCo
     <div className={`machine-card ${machine.connectionStatus}`}>
       <div className="machine-card-header">
         <h3 className="machine-name">{machine.name}</h3>
-        <div className="machine-actions">
-          <button
-            className="btn btn-small btn-icon"
-            onClick={() => onToggleConnection(machine)}
-            title={machine.connectionStatus === 'connected' ? '斷開' : '連接'}
-          >
-            {machine.connectionStatus === 'connected' ? '🔌' : '🔌'}
-          </button>
-          <button
-            className="btn btn-small btn-icon btn-danger"
-            onClick={() => onRemove(machine.id)}
-            title="刪除"
-          >
-            🗑️
-          </button>
-        </div>
+        {canManage && (
+          <div className="machine-actions">
+            <button
+              className="btn btn-small btn-icon"
+              onClick={() => onToggleConnection(machine)}
+              title={machine.connectionStatus === 'connected' ? '斷開' : '連接'}
+            >
+              連線
+            </button>
+            <button
+              className="btn btn-small btn-icon btn-danger"
+              onClick={() => onRemove(machine.id)}
+              title="刪除"
+            >
+              刪除
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="machine-card-body">

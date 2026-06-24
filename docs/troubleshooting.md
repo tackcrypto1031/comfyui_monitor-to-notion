@@ -267,14 +267,14 @@ npm run build
 ### 開啟日誌
 
 開發模式下，日誌輸出到：
-- **主進程**: Electron 終端視窗
-- **渲染進程**: 瀏覽器開發者工具 Console
+- **本機 Web Server**: 啟動 `npm run start:web` 的終端視窗
+- **前端**: 瀏覽器開發者工具 Console
 
 ### 查看日誌
 
 1. **開發模式**:
-   - 主進程日誌直接顯示在終端
-   - 渲染進程按 `Ctrl+Shift+I` 開啟 DevTools
+   - Server 日誌直接顯示在終端
+   - 前端按 `F12` 或 `Ctrl+Shift+I` 開啟 DevTools
 
 2. **生產模式**:
    - 日誌檔案位置：`%APPDATA%/comfyui-monitor/logs/`

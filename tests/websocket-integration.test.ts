@@ -14,11 +14,15 @@ describe('Phase 1 Integration Tests', () => {
   let configStore: ConfigStore;
   let wsManager: WebSocketManager;
   let statusEngine: StatusEngine;
+  let testConfigDir: string;
   let testConfigPath: string;
 
   beforeEach(() => {
     // Create unique test config path for each test
-    testConfigPath = path.join(process.cwd(), 'test-config', `test-${Date.now()}.json`);
+    const parentDir = path.join(process.cwd(), 'test-config');
+    fs.mkdirSync(parentDir, { recursive: true });
+    testConfigDir = fs.mkdtempSync(path.join(parentDir, 'websocket-'));
+    testConfigPath = path.join(testConfigDir, 'machines.json');
     configStore = new ConfigStore(testConfigPath);
     wsManager = new WebSocketManager();
     statusEngine = new StatusEngine();
@@ -27,15 +31,9 @@ describe('Phase 1 Integration Tests', () => {
   afterEach(() => {
     wsManager.disconnectAll();
     eventBus.removeAllListeners();
-    // Clean up test config file
-    if (testConfigPath && fs.existsSync(testConfigPath)) {
-      fs.unlinkSync(testConfigPath);
+    if (testConfigDir && fs.existsSync(testConfigDir)) {
+      fs.rmSync(testConfigDir, { recursive: true, force: true });
     }
-  });
-
-  afterEach(() => {
-    wsManager.disconnectAll();
-    eventBus.removeAllListeners();
   });
 
   describe('ConfigStore', () => {
@@ -136,7 +134,7 @@ describe('Phase 1 Integration Tests', () => {
       expect(statusEngine.getStatus(machineId)).toBe('generating');
     });
 
-    it('should transition from running to generating', () => {
+    it('should transition from running to generating', async () => {
       const machineId = 'test-machine';
       let statusChanges = 0;
       let lastStatus: string | null = null;
@@ -240,7 +238,7 @@ describe('Phase 1 Integration Tests', () => {
   });
 
   describe('StatusEngine transitions', () => {
-    it('should transition from running to generating', () => {
+    it('should transition from running to generating', async () => {
       const machineId = 'test-machine';
       let statusChanges = 0;
       let lastStatus: string | null = null;
@@ -271,6 +269,7 @@ describe('Phase 1 Integration Tests', () => {
 
       expect(statusEngine.getStatus(machineId)).toBe('generating');
       expect(statusChanges).toBeGreaterThan(0);
+      await new Promise((resolve) => setTimeout(resolve, 550));
       expect(lastStatus).toBe('generating');
     });
   });

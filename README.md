@@ -7,12 +7,12 @@
 <a name="english"></a>
 # 🖥️ ComfyUI Monitor → Notion (English)
 
-A lightweight desktop tool (Electron) that monitors multiple **ComfyUI** instances on your local network and automatically syncs their real-time status to a **Notion** database.
+A lightweight web tool that monitors multiple **ComfyUI** instances on your local network and automatically syncs their real-time status to a **Notion** database.
 
 ![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey.svg)
-![Built with Electron](https://img.shields.io/badge/built%20with-Electron%2028-47848F.svg)
+![Built with React](https://img.shields.io/badge/built%20with-React%2019-61DAFB.svg)
 
 ---
 
@@ -25,6 +25,7 @@ A lightweight desktop tool (Electron) that monitors multiple **ComfyUI** instanc
 | 🔌 **Auto-reconnect** | Exponential back-off (1s → 30s) with 30% jitter |
 | 📝 **Notion sync** | Status changes written to Notion in Traditional Chinese |
 | 🎨 **Clean GUI** | Color-coded cards; status bar summary |
+| 🌐 **LAN sharing** | Optional listen mode exposes a read-only URL for other LAN devices |
 
 ### Status Labels (in Notion)
 
@@ -55,15 +56,23 @@ cd comfyui_monitor-to-notion
 # 2. Install dependencies
 npm install
 
-# 3. Run in development mode
-npm run electron:dev
+# 3. Build and run the web server
+npm run build:web
+npm run start:web
 ```
 
-### Build a distributable installer (Windows)
+Open `http://127.0.0.1:7890/` on the host computer.
+
+Windows source checkout:
+- `start.bat` installs dependencies if needed, builds, then starts the web server on port `7890`.
+- root `run.bat` is only a compatibility shortcut that calls `start.bat`.
+- the portable package has its own `run.bat`; that one uses the bundled `node.exe` and does not require Node.js to be installed.
+
+### Build a portable Windows package
 
 ```bash
-npm run electron:build
-# Output: release/*.exe
+npm run package:portable
+# Output: release/comfyui-monitor-portable.zip
 ```
 
 ---
@@ -108,8 +117,8 @@ The tool will auto-create the required columns in your Notion database on first 
 
 | Layer | Technology |
 |-------|-----------|
-| App framework | Electron 28 |
 | Frontend | React 19 + TypeScript |
+| Local server | Node.js HTTP + ws |
 | Build | Vite 5 |
 | WebSocket | ws 8 |
 | Notion API | @notionhq/client 5 |
@@ -122,10 +131,10 @@ The tool will auto-create the required columns in your Notion database on first 
 ```
 comfyui_monitor-to-notion/
 ├── src/
-│   ├── main/          # Electron main process + IPC
+│   ├── server/        # Node web server + API controller
 │   ├── renderer/      # React UI (components, styles)
 │   ├── services/      # Core services (WebSocket, Notion, Status engine)
-│   ├── shared/        # Shared IPC types
+│   ├── shared/        # Shared API types
 │   ├── types/         # TypeScript type definitions
 │   └── utils/         # Utilities (Logger, RetryStrategy, Throttler)
 ├── tests/             # Unit & integration tests
@@ -170,7 +179,7 @@ MIT — see [LICENSE](LICENSE) for details.
 <a name="繁體中文"></a>
 # 🖥️ ComfyUI Monitor → Notion（繁體中文）
 
-一個輕量的桌面工具（Electron），可即時監控內網中多台 **ComfyUI** 節點的狀態，並自動同步記錄到 **Notion** 資料庫。
+一個輕量的 Web 工具，可即時監控內網中多台 **ComfyUI** 節點的狀態，並自動同步記錄到 **Notion** 資料庫。
 
 ---
 
@@ -183,6 +192,7 @@ MIT — see [LICENSE](LICENSE) for details.
 | 🔌 **自動重連** | 指數退避重連（1s → 30s），附 30% 抖動 |
 | 📝 **Notion 同步** | 狀態變化自動以繁體中文寫入 Notion |
 | 🎨 **直觀介面** | 顏色區分狀態卡片，底部狀態列摘要 |
+| 🌐 **內網監聽** | 可開啟只讀分享網址，讓內網其他裝置查看狀態 |
 
 ### 狀態說明（Notion 上顯示）
 
@@ -213,15 +223,18 @@ cd comfyui_monitor-to-notion
 # 2. 安裝依賴
 npm install
 
-# 3. 開發模式執行
-npm run electron:dev
+# 3. 建置並啟動 Web Server
+npm run build:web
+npm run start:web
 ```
 
-### 打包成 Windows 安裝程式
+在主機開啟 `http://127.0.0.1:7890/`。
+
+### 打包成 Windows 便攜包
 
 ```bash
-npm run electron:build
-# 輸出：release/*.exe
+npm run package:portable
+# 輸出：release/comfyui-monitor-portable.zip
 ```
 
 ---
@@ -266,8 +279,8 @@ npm run electron:build
 
 | 類別 | 技術 |
 |------|------|
-| 應用框架 | Electron 28 |
 | 前端 | React 19 + TypeScript |
+| 本機服務 | Node.js HTTP + ws |
 | 建置工具 | Vite 5 |
 | WebSocket | ws 8 |
 | Notion API | @notionhq/client 5 |
@@ -280,10 +293,10 @@ npm run electron:build
 ```
 comfyui_monitor-to-notion/
 ├── src/
-│   ├── main/          # Electron 主進程 + IPC
+│   ├── server/        # Node Web Server + API 控制器
 │   ├── renderer/      # React UI（元件、樣式）
 │   ├── services/      # 核心服務（WebSocket、Notion、狀態引擎）
-│   ├── shared/        # 共用 IPC 類型
+│   ├── shared/        # 共用 API 類型
 │   ├── types/         # TypeScript 型別定義
 │   └── utils/         # 工具函數（Logger、RetryStrategy、Throttler）
 ├── tests/             # 單元測試與整合測試

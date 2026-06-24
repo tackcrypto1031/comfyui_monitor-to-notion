@@ -8,20 +8,19 @@ import fs from 'fs';
 import path from 'path';
 
 describe('ConfigStore', () => {
+  let testConfigDir: string;
   let testConfigPath: string;
 
   beforeEach(() => {
-    testConfigPath = path.join(process.cwd(), 'test-config', `test-${Date.now()}.json`);
+    const parentDir = path.join(process.cwd(), 'test-config');
+    fs.mkdirSync(parentDir, { recursive: true });
+    testConfigDir = fs.mkdtempSync(path.join(parentDir, 'config-store-'));
+    testConfigPath = path.join(testConfigDir, 'machines.json');
   });
 
   afterEach(() => {
-    // Clean up test files
-    if (fs.existsSync(testConfigPath)) {
-      fs.unlinkSync(testConfigPath);
-    }
-    const notionConfigPath = path.join(path.dirname(testConfigPath), 'notion-config.json');
-    if (fs.existsSync(notionConfigPath)) {
-      fs.unlinkSync(notionConfigPath);
+    if (testConfigDir && fs.existsSync(testConfigDir)) {
+      fs.rmSync(testConfigDir, { recursive: true, force: true });
     }
   });
 
